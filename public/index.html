@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GIST</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="site-header">
+    <span class="logo">GIST</span>
+  </header>
+
+  <main class="container">
+
+    <!-- Welcome Screen -->
+    <div id="welcome-screen" class="screen">
+      <div class="welcome-content">
+        <h2>Solve riddles. Reveal the story.</h2>
+        <p>An AI analyses your image, creates hidden-object riddles, and weaves them into a mystery for you to uncover.</p>
+        <div class="input-group">
+          <label for="image-input">Image path</label>
+          <input type="text" id="image-input" placeholder="your_initial_puzzle_image.jpg">
+        </div>
+        <button id="start-btn" class="btn btn-primary">Start Game</button>
+        <p class="loading hidden" id="loading">Analysing image &amp; generating riddles…</p>
+      </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="screen hidden">
+      <div class="game-header">
+        <div class="progress">
+          <span id="progress-text">Round 1 of 3</span>
+          <div class="progress-bar">
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two riddle panels side by side -->
+      <div class="riddle-pairs">
+
+        <!-- Panel A -->
+        <div class="riddle-panel" id="panel-a">
+          <canvas class="image-crop" id="crop-a"></canvas>
+          <p class="riddle-text" id="riddle-a">Loading riddle…</p>
+          <div class="answer-input-group">
+            <input type="text" id="answer-a" placeholder="Your answer…" autocomplete="off">
+            <button class="btn btn-success" id="submit-a">Submit</button>
+          </div>
+          <div class="feedback" id="feedback-a"></div>
+          <div class="answer-display hidden" id="reveal-a">
+            <strong>Answer: </strong><span id="correct-a"></span>
+          </div>
+          <p class="attempts-left" id="attempts-a">3 attempts left</p>
+        </div>
+
+        <!-- Panel B -->
+        <div class="riddle-panel" id="panel-b">
+          <canvas class="image-crop" id="crop-b"></canvas>
+          <p class="riddle-text" id="riddle-b">Loading riddle…</p>
+          <div class="answer-input-group">
+            <input type="text" id="answer-b" placeholder="Your answer…" autocomplete="off">
+            <button class="btn btn-success" id="submit-b">Submit</button>
+          </div>
+          <div class="feedback" id="feedback-b"></div>
+          <div class="answer-display hidden" id="reveal-b">
+            <strong>Answer: </strong><span id="correct-b"></span>
+          </div>
+          <p class="attempts-left" id="attempts-b">3 attempts left</p>
+        </div>
+
+      </div>
+
+      <div class="pair-footer">
+        <p id="pair-status">Answer the riddles to continue…</p>
+        <button id="next-pair-btn" class="btn btn-secondary hidden">Next Round →</button>
+      </div>
+    </div>
+
+    <!-- Victory Screen -->
+    <div id="victory-screen" class="screen hidden">
+      <div class="victory-content">
+        <h1>🎉 Congratulations!</h1>
+        <p>You've uncovered all the hidden objects!</p>
+
+        <img id="victory-image" class="victory-image" src="" alt="The Mystery Image">
+
+        <div class="story-container">
+          <h2>📖 The Mystery Revealed</h2>
+          <p id="story-text" class="story-text">Loading story…</p>
+        </div>
+
+        <button id="restart-btn" class="btn btn-primary">Play Again</button>
+      </div>
+    </div>
+
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>

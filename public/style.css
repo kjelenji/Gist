@@ -1,0 +1,113 @@
+﻿/* Reset */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Base */
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #fff;
+  color: #1e3a5f;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 16px 48px;
+}
+
+/* Site Header */
+.site-header { width: 100%; max-width: 760px; padding: 28px 0 32px; text-align: center; }
+.logo { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.2em; color: #3b82f6; text-transform: uppercase; }
+
+/* Container */
+.container { width: 100%; max-width: 760px; }
+
+/* Screens */
+.screen { display: none; animation: fadeIn 0.18s ease; }
+.screen.hidden { display: none !important; }
+#welcome-screen { display: flex; justify-content: center; }
+#game-screen:not(.hidden) { display: block; }
+#victory-screen:not(.hidden) { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Welcome */
+.welcome-content { width: 100%; max-width: 440px; text-align: center; }
+.welcome-content h2 { font-size: 1.35rem; font-weight: 700; color: #60a5fa; line-height: 1.25; margin-bottom: 10px; }
+.welcome-content > p { font-size: 0.825rem; color: #60a5fa; line-height: 1.6; margin-bottom: 28px; }
+
+/* Input group */
+.input-group { margin-bottom: 16px; text-align: left; }
+.input-group label { display: block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #60a5fa; margin-bottom: 6px; }
+.input-group input { width: 100%; padding: 11px 14px; border: 1.5px solid #bfdbfe; border-radius: 8px; font-size: 0.95rem; font-family: inherit; color: #1e3a5f; background: #fff; transition: border-color 0.15s; }
+.input-group input:focus { outline: none; border-color: #3b82f6; }
+.input-group input::placeholder { color: #93c5fd; }
+
+/* Buttons */
+.btn { display: inline-block; padding: 11px 24px; border: none; border-radius: 8px; font-size: 0.925rem; font-family: inherit; font-weight: 600; cursor: pointer; transition: opacity 0.15s, background 0.15s; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: #60a5fa; color: #fff; width: 100%; padding: 13px 24px; font-size: 0.975rem; margin-top: 8px; }
+.btn-primary:hover:not(:disabled) { background: #3b82f6; }
+.btn-success { background: #60a5fa; color: #fff; white-space: nowrap; }
+.btn-success:hover:not(:disabled) { background: #3b82f6; }
+.btn-secondary { background: #60a5fa; color: #fff; padding: 11px 28px; }
+.btn-secondary:hover:not(:disabled) { background: #3b82f6; }
+
+/* Loading */
+.loading { margin-top: 16px; font-size: 0.875rem; color: #64748b; font-weight: 500; }
+.loading.hidden { display: none; }
+
+/* Game header / progress */
+.game-header { margin-bottom: 24px; }
+.progress { display: flex; flex-direction: column; gap: 8px; }
+#progress-text { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }
+.progress-bar { width: 100%; height: 3px; background: #dbeafe; border-radius: 99px; overflow: hidden; }
+.progress-fill { height: 100%; background: #60a5fa; width: 0%; transition: width 0.35s ease; }
+
+/* Riddle pairs */
+.riddle-pairs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+
+/* Panel */
+.riddle-panel { display: flex; flex-direction: column; gap: 12px; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 16px; background: #fff; }
+.image-crop { width: 100%; height: 170px; border-radius: 8px; display: none; background: #eff6ff; }
+.riddle-text { font-size: 1rem; color: #1e40af; line-height: 1.6; font-style: italic; }
+
+/* Answer input */
+.answer-input-group { display: flex; gap: 8px; }
+.answer-input-group input { flex: 1; padding: 10px 12px; border: 1.5px solid #bfdbfe; border-radius: 8px; font-size: 0.925rem; font-family: inherit; color: #1e3a5f; background: #fff; transition: border-color 0.15s; }
+.answer-input-group input:focus { outline: none; border-color: #3b82f6; }
+.answer-input-group input::placeholder { color: #93c5fd; }
+
+/* Feedback */
+.feedback { font-size: 0.85rem; font-weight: 600; display: none; padding: 8px 10px; border-radius: 6px; }
+.feedback.correct { display: block; color: #065f46; background: #ecfdf5; }
+.feedback.incorrect { display: block; color: #991b1b; background: #fef2f2; }
+
+/* Reveal */
+.answer-display { font-size: 0.875rem; color: #1e3a5f; padding: 8px 12px; background: #eff6ff; border-radius: 6px; border: 1px solid #bfdbfe; }
+.answer-display.hidden { display: none; }
+.answer-display strong { color: #3b82f6; }
+
+/* Attempts */
+.attempts-left { font-size: 0.775rem; color: #93c5fd; min-height: 16px; }
+
+/* Pair footer */
+.pair-footer { text-align: center; padding-top: 4px; }
+#pair-status { font-size: 0.875rem; color: #64748b; margin-bottom: 12px; }
+
+/* Victory */
+.victory-content { text-align: center; }
+.victory-content h1 { font-size: 2rem; font-weight: 700; color: #1e3a5f; margin-bottom: 8px; }
+.victory-content > p { font-size: 0.975rem; color: #64748b; margin-bottom: 20px; }
+.victory-image { width: 100%; max-height: 340px; object-fit: contain; border-radius: 12px; border: 1.5px solid #bfdbfe; display: block; margin: 0 auto 32px; }
+.story-container { border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 24px; margin-bottom: 28px; text-align: left; }
+.story-container h2 { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #64748b; margin-bottom: 14px; }
+.story-text { font-size: 1rem; color: #1e3a5f; line-height: 1.8; }
+
+/* Responsive */
+@media (max-width: 560px) {
+  .riddle-pairs { grid-template-columns: 1fr; }
+  .welcome-content h2 { font-size: 1.6rem; }
+  .site-header { padding: 20px 0 24px; }
+}

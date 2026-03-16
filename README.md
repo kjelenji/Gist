@@ -1,4 +1,4 @@
-# GIST — Get The Gist?
+# GIST
 
 An AI-powered mystery card game. Upload any photo (or let AI generate one), and the game builds a unique set of illustrated riddle cards from whatever objects it finds in the image. Solve all the riddles to reveal the full story.
 
@@ -55,10 +55,10 @@ npm install
 
 ### 2. Add your API key
 
-Open `ui.js` and replace the `API_KEY` value at the top:
+Create a `.env` file in the project root (or set the environment variable directly):
 
-```js
-const API_KEY = 'YOUR_GEMINI_API_KEY';
+```
+GEMINI_API_KEY=your_key_here
 ```
 
 Get a key at [aistudio.google.com](https://aistudio.google.com).
@@ -93,6 +93,27 @@ memory.js               — Firestore load/save
 
 ---
 
-## Feedback
+## Deploying to Render
 
-Played the game? [Take our survey →](https://forms.gle/KX6FZgZuUJnEV9DS9)
+1. Push this repo to GitHub
+2. Go to [render.com](https://render.com) → **New → Web Service**
+3. Connect your GitHub repo (`kjelenji/Gist`)
+4. Set the following:
+
+| Setting | Value |
+|---|---|
+| **Environment** | `Node` |
+| **Build Command** | `npm install` |
+| **Start Command** | `npm start` |
+
+5. Under **Environment Variables**, add:
+
+| Key | Value |
+|---|---|
+| `GEMINI_API_KEY` | Your Gemini API key from [aistudio.google.com](https://aistudio.google.com) |
+
+6. Click **Deploy** — Render will assign a public URL automatically
+
+> Render's free tier spins down after inactivity. The first request after sleep takes ~30 seconds.
+
+---

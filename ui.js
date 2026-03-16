@@ -9,10 +9,13 @@ import { generateDrawingsForObjects } from './generate_drawing.js';
 import { generateStoryFromObjects } from './generate_story.js';
 import { loadMemory, saveMemory } from './memory.js';
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const API_KEY = 'AIzaSyDvstYbpu_WDnQfDFR6w_AfsOebRU9B8XA';
+const API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDvstYbpu_WDnQfDFR6w_AfsOebRU9B8XA';
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));

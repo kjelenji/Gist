@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 const METADATA_DIR = path.join(__dirname, 'generated_metadata');
 
-const genAI = new GoogleGenerativeAI('AIzaSyCug211miDvG-NT_nwyr7hIJuPnUVQiJHA');
+const genAI = new GoogleGenerativeAI('AIzaSyDvstYbpu_WDnQfDFR6w_AfsOebRU9B8XA');
 
 async function generateImagesFromDetectedObjects(detectedObjects) {
   const generatedImages = [];

@@ -24,7 +24,8 @@ body {
 .screen { display: none; animation: fadeIn 0.18s ease; }
 .screen.hidden { display: none !important; }
 #welcome-screen { display: flex; justify-content: center; }
-#game-screen:not(.hidden) { display: block; }
+#deck-screen:not(.hidden) { display: block; }
+#riddle-screen:not(.hidden) { display: block; }
 #victory-screen:not(.hidden) { display: block; }
 
 @keyframes fadeIn {
@@ -105,9 +106,254 @@ body {
 .story-container h2 { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #64748b; margin-bottom: 14px; }
 .story-text { font-size: 1rem; color: #1e3a5f; line-height: 1.8; }
 
+/* File input */
+.input-group input[type="file"] {
+  padding: 8px 0;
+  border: none;
+  font-size: 0.875rem;
+  color: #1e3a5f;
+  cursor: pointer;
+}
+.input-group input[type="file"]::file-selector-button {
+  padding: 8px 16px;
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  color: #1e40af;
+  cursor: pointer;
+  margin-right: 10px;
+  transition: background 0.15s;
+}
+.input-group input[type="file"]::file-selector-button:hover { background: #dbeafe; }
+
+/* AI image option on welcome screen */
+.input-divider { display: flex; align-items: center; gap: 12px; margin: 12px 0; color: #93c5fd; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.input-divider::before, .input-divider::after { content: ''; flex: 1; height: 1px; background: #bfdbfe; }
+.ai-preview-wrap { margin: 14px 0 4px; text-align: center; }
+.ai-preview-img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px; border: 2px solid #bfdbfe; filter: blur(12px); transform: scale(1.04); }
+.ai-scene-label { font-size: 0.72rem; color: #60a5fa; margin-top: 6px; font-style: italic; }
+
+/* Survey block on victory screen */
+.survey-prompt { margin-top: 28px; padding: 18px 20px; background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 12px; text-align: center; }
+.survey-prompt p { font-size: 0.9rem; color: #1e40af; margin-bottom: 12px; font-weight: 500; }
+
+/* Game theme label */
+.game-theme-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #3b82f6;
+  margin-bottom: 6px;
+}
+
+/* Mystery Cards */
+.theme-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #3b82f6; margin-bottom: 8px; }
+
+/* Deck screen */
+.deck-instruction {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  text-align: center;
+  margin-bottom: 14px;
+  min-height: 1.2em;
+}
+
+/* Riddle screen */
+.riddle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.btn-back {
+  background: none;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  font-weight: 600;
+  color: #3b82f6;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-back:hover { background: #eff6ff; border-color: #93c5fd; }
+
+/* Cards shown on riddle screen */
+.riddle-cards {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.riddle-card-display {
+  flex: 0 0 auto;
+  width: 220px;
+  text-align: center;
+}
+
+.riddle-card-canvas {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  display: block;
+  object-fit: cover;
+  background: #dbeafe;
+}
+
+.riddle-card-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1e40af;
+  margin-top: 8px;
+  letter-spacing: 0.04em;
+}
+
+.riddle-section { margin-bottom: 24px; text-align: center; }
+.riddle-text { font-size: 1.05rem; color: #1e40af; line-height: 1.7; font-style: italic; margin-bottom: 10px; font-weight: 500; }
+.riddle-hint { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #64748b; }
+
+.feedback-bar { padding: 12px 16px; border-radius: 8px; font-size: 0.95rem; font-weight: 600; text-align: center; margin-bottom: 20px; }
+.feedback-bar.hidden { display: none; }
+.feedback-bar.correct { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.feedback-bar.wrong   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+.card-grid { display: flex; flex-direction: row; flex-wrap: nowrap; gap: 14px; margin-bottom: 28px; overflow-x: auto; padding-bottom: 8px; }
+.mystery-card { flex: 0 0 160px; }
+
+.mystery-card {
+  border: 2px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 10px 10px 14px;
+  cursor: pointer;
+  background: #fff;
+  text-align: center;
+  user-select: none;
+  transition: border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+.mystery-card:hover { border-color: #60a5fa; transform: translateY(-3px); box-shadow: 0 4px 14px rgba(59,130,246,0.15); }
+.mystery-card.selected { border-color: #3b82f6; border-width: 2.5px; box-shadow: 0 0 0 3px rgba(59,130,246,0.18); transform: translateY(-3px); }
+.mystery-card.correct  { border-color: #10b981; border-width: 2.5px; background: #ecfdf5; box-shadow: 0 0 0 3px rgba(16,185,129,0.18); transform: translateY(-3px); }
+.mystery-card.wrong    { border-color: #ef4444; border-width: 2.5px; background: #fef2f2; transform: translateY(0); }
+.mystery-card.solved   { opacity: 0.38; pointer-events: none; cursor: default; border-color: #e2e8f0; box-shadow: none; transform: none; }
+
+/* Card image crop */
+.card-crop-wrapper {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.card-canvas {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  display: block;
+  object-fit: cover;
+  background: #dbeafe;
+}
+
+/* Hidden object overlay — lifts on correct answer */
+.card-hidden-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 18, 40, 0.87);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.card-hidden-overlay.revealed {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+}
+.overlay-q {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #60a5fa;
+  line-height: 1;
+}
+.overlay-name {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #93c5fd;
+  letter-spacing: 0.05em;
+  text-align: center;
+  padding: 0 8px;
+  line-height: 1.35;
+}
+
+.card-icon { font-size: 2.4rem; margin-bottom: 10px; }
+.card-name { font-size: 0.875rem; font-weight: 700; color: #1e3a5f; margin-bottom: 6px; }
+.card-desc { font-size: 0.75rem; color: #64748b; line-height: 1.5; }
+
+.mystery-card.card-exit {
+  opacity: 0;
+  transform: scale(0.88) translateY(-14px);
+  pointer-events: none;
+  transition: opacity 0.48s ease, transform 0.48s ease;
+}
+.answer-panel {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 18px 16px 20px;
+  margin-bottom: 20px;
+  animation: slideUp 0.22s ease;
+}
+/* no .answer-panel.hidden rule — it's always visible on the riddle screen */
+
+.answer-prompt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #3b82f6;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.answer-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.answer-btn {
+  width: 100%;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 0.925rem;
+  font-family: inherit;
+  color: #1e3a5f;
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.4;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.answer-btn:hover        { border-color: #60a5fa; background: #dbeafe; transform: translateX(4px); }
+.answer-btn.correct      { background: #ecfdf5; border-color: #10b981; color: #065f46; font-weight: 600; }
+.answer-btn.wrong        { background: #fef2f2; border-color: #ef4444; color: #991b1b; }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Responsive */
 @media (max-width: 560px) {
-  .riddle-pairs { grid-template-columns: 1fr; }
+  .card-grid { gap: 10px; }
   .welcome-content h2 { font-size: 1.6rem; }
   .site-header { padding: 20px 0 24px; }
 }

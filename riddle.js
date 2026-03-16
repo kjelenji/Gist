@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-const genAI = new GoogleGenerativeAI('AIzaSyCug211miDvG-NT_nwyr7hIJuPnUVQiJHA');
+const genAI = new GoogleGenerativeAI('AIzaSyDvstYbpu_WDnQfDFR6w_AfsOebRU9B8XA');
 
 function createReadlineInterface() {
   return readline.createInterface({

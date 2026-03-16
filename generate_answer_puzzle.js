@@ -35,7 +35,7 @@ async function run() {
 
   try {
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
-  const ai = new GoogleGenerativeAI("AIzaSyCug211miDvG-NT_nwyr7hIJuPnUVQiJHA");
+  const ai = new GoogleGenerativeAI("AIzaSyDvstYbpu_WDnQfDFR6w_AfsOebRU9B8XA");
 
 
     const model = ai.getGenerativeModel({ 

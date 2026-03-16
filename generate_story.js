@@ -1,7 +1,7 @@
 ﻿import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 
-const genAI = new GoogleGenerativeAI('AIzaSyCug211miDvG-NT_nwyr7hIJuPnUVQiJHA');
+const genAI = new GoogleGenerativeAI('AIzaSyDvstYbpu_WDnQfDFR6w_AfsOebRU9B8XA');
 
 async function generateStoryFromObjects(generatedImages, imagePath = null) {
   const objectLabels = generatedImages.map(img => img.label);

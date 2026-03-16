@@ -1,21 +1,29 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 
-const genAI = new GoogleGenerativeAI('AIzaSyCug211miDvG-NT_nwyr7hIJuPnUVQiJHA');
+const genAI = new GoogleGenerativeAI('AIzaSyDvstYbpu_WDnQfDFR6w_AfsOebRU9B8XA');
 
 async function detectObjectsInImage(imagePath) {
   const imageBytes = fs.readFileSync(imagePath).toString('base64');
   const mimeType = imagePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-  const response = await model.generateContent([
-    { inlineData: { data: imageBytes, mimeType } },
-    'Detect all distinct objects in this image. ' +
-    'Return ONLY a valid JSON array with no markdown. ' +
-    'Each element must have exactly two keys: ' +
-    '"label" (string name of the object) and ' +
-    '"bbox" (array [ymin, xmin, ymax, xmax] as integers 0-1000).'
-  ]);
+  const response = await model.generateContent({
+    contents: [{
+      role: 'user',
+      parts: [
+        { inlineData: { data: imageBytes, mimeType } },
+        { text:
+          'Detect all distinct objects in this image. ' +
+          'Return ONLY a valid JSON array. ' +
+          'Each element must have exactly two keys: ' +
+          '"label" (string name of the object) and ' +
+          '"bbox" (array [ymin, xmin, ymax, xmax] as integers 0-1000).'
+        }
+      ]
+    }],
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+  });
 
   let jsonText = response.response.text();
 

@@ -20,83 +20,93 @@
     <!-- Welcome Screen -->
     <div id="welcome-screen" class="screen">
       <div class="welcome-content">
-        <h2>Solve riddles. Reveal the story.</h2>
-        <p>An AI analyses your image, creates hidden-object riddles, and weaves them into a mystery for you to uncover.</p>
+        <p class="theme-label">Accessible Storytelling</p>
+        <h2>Drop in any image or generate an image.<br>Solve the riddle.</h2>
+        <p>AI analyses your image, invents a card deck and riddles.</p>
         <div class="input-group">
-          <label for="image-input">Image path</label>
-          <input type="text" id="image-input" placeholder="your_initial_puzzle_image.jpg">
+          <label for="image-input">Upload an image</label>
+          <input type="file" id="image-input" accept="image/*">
         </div>
-        <button id="start-btn" class="btn btn-primary">Start Game</button>
-        <p class="loading hidden" id="loading">Analysing image &amp; generating riddles…</p>
+        <div class="input-divider"><span>or</span></div>
+        <button id="ai-image-btn" class="btn btn-secondary">Generate AI Image</button>
+        <div id="ai-preview-wrap" class="ai-preview-wrap hidden">
+          <img id="ai-preview" class="ai-preview-img" src="" alt="AI generated scene">
+        </div>
+        <button id="start-btn" class="btn btn-primary">Create Riddles</button>
+        <p class="loading hidden" id="loading">Gist is crafting your riddle…</p>
       </div>
     </div>
 
-    <!-- Game Screen -->
-    <div id="game-screen" class="screen hidden">
+    <!-- Deck Screen — player picks card(s) -->
+    <div id="deck-screen" class="screen hidden">
       <div class="game-header">
+        <p id="game-theme" class="game-theme-label"></p>
         <div class="progress">
-          <span id="progress-text">Round 1 of 3</span>
+          <span id="progress-text">0 of 2 riddles solved</span>
           <div class="progress-bar">
             <div id="progress-fill" class="progress-fill"></div>
           </div>
         </div>
       </div>
 
-      <!-- Two riddle panels side by side -->
-      <div class="riddle-pairs">
+      <p class="deck-instruction" id="deck-instruction">Choose a card to reveal its riddle.</p>
+      <div class="feedback-bar hidden" id="deck-feedback"></div>
 
-        <!-- Panel A -->
-        <div class="riddle-panel" id="panel-a">
-          <canvas class="image-crop" id="crop-a"></canvas>
-          <p class="riddle-text" id="riddle-a">Loading riddle…</p>
-          <div class="answer-input-group">
-            <input type="text" id="answer-a" placeholder="Your answer…" autocomplete="off">
-            <button class="btn btn-success" id="submit-a">Submit</button>
-          </div>
-          <div class="feedback" id="feedback-a"></div>
-          <div class="answer-display hidden" id="reveal-a">
-            <strong>Answer: </strong><span id="correct-a"></span>
-          </div>
-          <p class="attempts-left" id="attempts-a">3 attempts left</p>
-        </div>
-
-        <!-- Panel B -->
-        <div class="riddle-panel" id="panel-b">
-          <canvas class="image-crop" id="crop-b"></canvas>
-          <p class="riddle-text" id="riddle-b">Loading riddle…</p>
-          <div class="answer-input-group">
-            <input type="text" id="answer-b" placeholder="Your answer…" autocomplete="off">
-            <button class="btn btn-success" id="submit-b">Submit</button>
-          </div>
-          <div class="feedback" id="feedback-b"></div>
-          <div class="answer-display hidden" id="reveal-b">
-            <strong>Answer: </strong><span id="correct-b"></span>
-          </div>
-          <p class="attempts-left" id="attempts-b">3 attempts left</p>
-        </div>
-
-      </div>
+      <!-- 6-Card Grid -->
+      <div class="card-grid" id="card-grid"></div>
 
       <div class="pair-footer">
-        <p id="pair-status">Answer the riddles to continue…</p>
-        <button id="next-pair-btn" class="btn btn-secondary hidden">Next Round →</button>
+        <button id="solve-btn" class="btn btn-primary hidden">Solve This Riddle →</button>
+      </div>
+    </div>
+
+    <!-- Riddle Screen — riddle + selected cards + answer options -->
+    <div id="riddle-screen" class="screen hidden">
+      <div class="riddle-header">
+        <button id="back-btn" class="btn-back">← Back to Deck</button>
+        <p id="riddle-progress" class="game-theme-label"></p>
+      </div>
+
+      <!-- Selected card(s) shown large at top -->
+      <div class="riddle-cards" id="riddle-cards"></div>
+
+      <!-- The riddle -->
+      <div class="riddle-section">
+        <h2 class="riddle-text" id="riddle-text"></h2>
+      </div>
+
+      <!-- Multiple Choice Answer Panel -->
+      <div id="answer-panel" class="answer-panel">
+        <p class="answer-prompt">What does this reveal about the mystery?</p>
+        <div id="answer-options" class="answer-options"></div>
+      </div>
+
+      <!-- Feedback -->
+      <div class="feedback-bar hidden" id="feedback-bar"></div>
+
+      <div class="pair-footer">
+        <button id="next-riddle-btn" class="btn btn-secondary hidden">Next Riddle →</button>
       </div>
     </div>
 
     <!-- Victory Screen -->
     <div id="victory-screen" class="screen hidden">
       <div class="victory-content">
-        <h1>🎉 Congratulations!</h1>
-        <p>You've uncovered all the hidden objects!</p>
+        <h1>Mystery Solved!</h1>
+        <p>You uncovered every secret hidden in the image.</p>
 
-        <img id="victory-image" class="victory-image" src="" alt="The Mystery Image">
+        <img id="victory-image" class="victory-image" src="" alt="The Revealed Image">
 
         <div class="story-container">
-          <h2>📖 The Mystery Revealed</h2>
-          <p id="story-text" class="story-text">Loading story…</p>
+          <h2>The Mystery Revealed</h2>
+          <p id="story-text" class="story-text"></p>
         </div>
 
         <button id="restart-btn" class="btn btn-primary">Play Again</button>
+        <div class="survey-prompt">
+          <p>Enjoyed the game? We'd love your feedback!</p>
+          <a href="https://forms.gle/KX6FZgZuUJnEV9DS9" target="_blank" rel="noopener" class="btn btn-secondary">Take the Survey →</a>
+        </div>
       </div>
     </div>
 

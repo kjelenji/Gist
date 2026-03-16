@@ -15,7 +15,8 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDvstYbpu_WDnQfDFR6w_AfsOebRU9B8XA';
+const API_KEY = process.env.GEMINI_API_KEY;
+if (!API_KEY) throw new Error('GEMINI_API_KEY environment variable is not set');
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));

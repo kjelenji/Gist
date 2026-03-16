@@ -80,16 +80,60 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Project Structure
 
 ```
-ui.js                   — Express server, all API endpoints, AI orchestration
+ui.js                        — Express server, all API endpoints, AI orchestration
 public/
-  index.html            — Game HTML (welcome, deck, riddle, victory screens)
-  script.js             — Frontend game logic
-  style.css             — Styles
+  index.html                 — Game HTML (welcome, deck, riddle, victory screens)
+  script.js                  — Frontend game logic
+  style.css                  — Styles
 locate_objects_spatially.js  — Object detection with bounding boxes
-generate_story.js       — Story generation
-card_deck.js            — Card deck helpers
-memory.js               — Firestore load/save
+generate_drawing.js          — Card illustration prompts
+generate_story.js            — Story generation
+memory.js                    — Firestore load/save
 ```
+
+---
+
+## System Architecture
+
+```mermaid
+flowchart TD
+    A([User Browser]) -->|Upload photo OR\nclick Generate AI Image| B[Welcome Screen]
+
+    B -->|POST /api/generate-ai-image| C["Imagen 4.0 Fast\n(random scene)"]
+    C -->|base64 image| B
+
+    B -->|POST /api/generate-mystery\nwith base64 image| D[Express Server - ui.js]
+
+    D --> E["Object Detection\nGemini 2.5 Flash\n→ up to 6 labelled objects\n  with bounding boxes"]
+    E --> F["Memory Lookup\nFirestore\n(avoid past themes)"]
+    F --> G["Mystery Builder\nGemini 2.5 Flash\n→ theme, 6 cards,\n  5 riddles, story"]
+    G --> H["Card Illustrator\nGemini 3.1 Flash Image\n→ crosshatch illustration\n  per card (sequential)"]
+    H --> I["Memory Save\nFirestore\n(non‑blocking)"]
+    H -->|levelData JSON| A
+
+    A -->|GET /api/card-image/:id| D
+    D -->|PNG from in-memory store| A
+    A -->|GET /api/image| D
+    D -->|original scene JPEG| A
+
+    subgraph "Game Screens (Frontend)"
+        W[Welcome] --> DK[Deck]
+        DK --> R[Riddle]
+        R --> DK
+        R --> V[Victory + Survey]
+        V --> W
+    end
+```
+
+### Request Flow Summary
+
+| Step | Endpoint | Model | Purpose |
+|---|---|---|---|
+| 1 | `POST /api/generate-ai-image` | Imagen 4.0 Fast | (Optional) Generate a random scene |
+| 2 | `POST /api/generate-mystery` | Gemini 2.5 Flash | Detect objects, build cards/riddles/story |
+| 2a | — | Gemini 3.1 Flash Image | Generate crosshatch card illustrations |
+| 3 | `GET /api/card-image/:id` | — | Serve cached card illustration |
+| 4 | `GET /api/image` | — | Serve cached scene image for victory reveal |
 
 ---
 

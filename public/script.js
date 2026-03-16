@@ -41,7 +41,38 @@ const restartBtn     = document.getElementById('restart-btn');
 const aiImageBtn     = document.getElementById('ai-image-btn');
 const aiPreviewWrap  = document.getElementById('ai-preview-wrap');
 const aiPreview      = document.getElementById('ai-preview');
+const alchemistOrb   = document.getElementById('alchemist-orb');
 let useAiImage = false;  // true when player chose AI-generated image
+
+// ── Speech Synthesis ─────────────────────────────────────────────────────────
+let _voices = [];
+function _loadVoices() { _voices = window.speechSynthesis?.getVoices() || []; }
+if (window.speechSynthesis) {
+  _loadVoices();
+  window.speechSynthesis.addEventListener('voiceschanged', _loadVoices);
+}
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  const voice = _voices.find(v => v.name.includes('Google UK English Male'))
+    || _voices.find(v => v.lang === 'en-GB')
+    || _voices.find(v => v.lang.startsWith('en'))
+    || _voices[0];
+  if (voice) utterance.voice = voice;
+  utterance.pitch = 0.8;
+  utterance.rate  = 0.9;
+  utterance.onstart = () => alchemistOrb?.classList.add('speaking');
+  utterance.onend   = () => alchemistOrb?.classList.remove('speaking');
+  utterance.onerror = () => alchemistOrb?.classList.remove('speaking');
+  window.speechSynthesis.speak(utterance);
+}
+
+function stopSpeaking() {
+  window.speechSynthesis?.cancel();
+  alchemistOrb?.classList.remove('speaking');
+}
 
 // ── Event Listeners ────────────────────────────────────────────────────────────
 startBtn.addEventListener('click', startGame);
@@ -165,6 +196,7 @@ function showDeckScreen() {
 }
 
 function goToDeckScreen() {
+  stopSpeaking();
   showDeckScreen();
 }
 
@@ -197,6 +229,7 @@ function goToRiddleScreen() {
 
   // Show riddle text
   riddleText.textContent = riddle.text;
+  speak(riddle.text);
 
   // Populate answer options
   renderAnswerOptions(riddle);
@@ -507,12 +540,15 @@ function showVictory() {
   victoryScreen.classList.remove('hidden');
   victoryImage.src           = '/api/image';
   victoryImage.style.display = 'block';
-  storyText.textContent = levelData.story ||
+  const story = levelData.story ||
     `You unravelled every clue in "${levelData.theme}" and the mystery is finally revealed.`;
+  storyText.textContent = story;
+  setTimeout(() => speak(story), 600);
 }
 
 // ── Restart ────────────────────────────────────────────────────────────────────
 function restartGame() {
+  stopSpeaking();
   levelData  = null;
   gameImage  = null;
   useAiImage = false;

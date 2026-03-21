@@ -1,6 +1,6 @@
 # GIST
 
-An AI-powered mystery card game. Upload any photo (or let AI generate one), and the game builds a unique set of illustrated riddle cards from whatever objects it finds in the image. Solve all the riddles to reveal the full story.
+An AI-powered card game. Upload any photo (or let AI generate one), and the game builds a unique set of illustrated riddle cards from whatever objects it finds in the image. Solve all the riddles to reveal the full story.
 
 ---
 

@@ -27,16 +27,6 @@
   const wordplayResult = { src: '/howto/ice-cream.png', label: 'ice cream' };
 
   /**
-   * Combine demo — L-swipe on a mini 3×3 (same path as the move example).
-   * Indices: 0 1 2 / 3 4 5 / 6 7 8
-   */
-  const combinePath = {
-    6: { src: '/howto/car.png', order: 1 },
-    7: { src: '/howto/tea.png', order: 2 },
-    4: { src: '/howto/gun.png', order: 3 },
-  };
-
-  /**
    * 3×3 schematic matching a real board layout:
    *   rebus | link-a | fill
    *   link-b | fill  | link-a
@@ -78,8 +68,9 @@
       shared edges. Diagonals do not count.
     </p>
     <p>
-      Once a group is solved, those tiles are <strong>eliminated</strong>. You can still swipe
-      over the empty space to reach icons that are no longer next to each other.
+      Once a group is solved, those three tiles are <strong>replaced by one result</strong>.
+      The other two cells go empty. You can still swipe over empty space to reach icons
+      that are no longer next to each other.
     </p>
 
     <div class="ortho" aria-hidden="true">
@@ -144,7 +135,7 @@
           </span>
         {/each}
       </div>
-      <p class="caption muted">The faded tile is gone — path through it to connect 1 → 2 → 3</p>
+      <p class="caption muted">The faded tile is empty — path through it to connect 1 → 2 → 3</p>
     </div>
   </section>
 
@@ -152,22 +143,12 @@
     <h3>2. The puzzle board</h3>
     <p>
       Every week has <strong>2 rebuses</strong>, <strong>2 links</strong>, and
-      <strong>2 fill-ins</strong>. Group three icons on the <strong>3×3 board</strong> — that
-      group’s answer fills one circle in the <strong>top strip</strong>. The three strip
-      answers then combine into a rebus.
+      <strong>2 fill-ins</strong> on the <strong>3×3 board</strong>. Group three icons —
+      their answer pops onto the board. Keep combining leftover tiles until none remain.
     </p>
 
     <div class="board-diagram" aria-hidden="true">
-      <p class="caption">Top strip — rebus</p>
-      <div class="strip-row">
-        {#each [1, 2, 3] as n}
-          <div class="diagram-slot strip-icon empty">
-            <span class="slot-num">{n}</span>
-          </div>
-        {/each}
-      </div>
-
-      <p class="caption board-caption">3×3 board</p>
+      <p class="caption">3×3 board</p>
       <div class="diagram-board">
         {#each boardCells as cell}
           <div
@@ -181,33 +162,10 @@
       </div>
 
       <ul class="board-legend">
-        <li><span class="swatch rebus"></span> 1 rebus</li>
+        <li><span class="swatch rebus"></span> 2 rebus</li>
         <li><span class="swatch link-a"></span> 2 link</li>
         <li><span class="swatch fill"></span> 2 fill-in</li>
       </ul>
-    </div>
-
-    <div class="combine-demo" aria-hidden="true">
-      <p class="caption">Combine three icons</p>
-      <div class="strip-row">
-        <div class="diagram-slot strip-icon filled">
-          <img src={rebusResult.src} alt="" />
-        </div>
-        <div class="diagram-slot strip-icon empty"><span class="slot-num">2</span></div>
-        <div class="diagram-slot strip-icon empty"><span class="slot-num">3</span></div>
-      </div>
-      <span class="demo-arrow">↑</span>
-      <div class="mini-board combine-board">
-        {#each Array(9) as _, i}
-          {@const step = combinePath[i]}
-          <span class="mini-tile" class:on-path={!!step}>
-            {#if step}
-              <img src={step.src} alt="" />
-              <span class="swipe-num">{step.order}</span>
-            {/if}
-          </span>
-        {/each}
-      </div>
     </div>
   </section>
 
@@ -309,7 +267,7 @@
     <h3>4. One play per week</h3>
     <p>
       Finish to earn a collectible and climb the weekly scoreboard. Score is based on number
-      of hints used and lives lost.
+      of hints used and lives lost. Clear the board to win.
     </p>
   </section>
   </div>
@@ -565,105 +523,6 @@
     border: 1px solid var(--gist-border);
     border-radius: 12px;
     padding: 0.85rem;
-    margin-top: 0.25rem;
-  }
-
-  .strip-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    max-width: 240px;
-    margin: 0 auto 0.85rem;
-  }
-
-  .diagram-slot,
-  .diagram-tile {
-    aspect-ratio: 1;
-    border-radius: 8px;
-    border: 1.5px solid var(--gist-border);
-    background: var(--gist-tile);
-  }
-
-  .diagram-slot.strip-icon {
-    width: 52px;
-    height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    overflow: hidden;
-    border-color: #00008b;
-    background: color-mix(in srgb, #00008b 16%, var(--gist-tile));
-  }
-
-  .diagram-slot.strip-icon.empty {
-    border-color: var(--gist-slot-border);
-    background: var(--gist-slot);
-  }
-
-  .diagram-slot.strip-icon.filled {
-    border-color: var(--gist-tile-border);
-    background: var(--gist-tile);
-  }
-
-  .diagram-slot.strip-icon img {
-    width: 34px;
-    height: 34px;
-    object-fit: contain;
-    display: block;
-  }
-
-  .slot-num {
-    color: var(--gist-border-strong);
-    font-weight: 700;
-    font-size: 1.05rem;
-  }
-
-  .combine-demo {
-    margin-top: 0.65rem;
-    padding-top: 0.65rem;
-    border-top: 1px dashed var(--gist-border);
-  }
-
-  .combine-demo .strip-row {
-    margin-bottom: 0.2rem;
-  }
-
-  .combine-board {
-    grid-template-columns: repeat(3, 52px);
-    margin-bottom: 0;
-  }
-
-  .combine-board .mini-tile {
-    width: 52px;
-    height: 52px;
-  }
-
-  .combine-board .mini-tile img {
-    width: 30px;
-    height: 30px;
-    object-fit: contain;
-    display: block;
-  }
-
-  .combine-board .swipe-num {
-    position: absolute;
-    top: 3px;
-    right: 3px;
-  }
-
-  .demo-arrow {
-    display: block;
-    text-align: center;
-    color: var(--gist-text-muted);
-    font-weight: 700;
-    font-size: 1.1rem;
-    line-height: 1;
-    margin: 0.15rem 0 0.4rem;
-  }
-
-  .board-caption {
     margin-top: 0.25rem;
   }
 

@@ -4,6 +4,7 @@
    *
    * - Fill-in tiles show 3 icons; tap one to select/deselect
    * - Swipe across 3 icons to combine them
+   * - The result pops onto the board; clear every tile (4 combines)
    * - Board shows icons only (no words)
    */
   import { onMount } from 'svelte';
@@ -14,15 +15,20 @@
     GROUPS,
     THEME,
     COLLECTIBLE,
+    THEME_GROUP,
     MAX_LIVES,
     HINT_REVEAL_ORDER,
     MAX_HINTS,
+    TOTAL_MOVES,
+    COMBINE_SIZE,
     matchGroup,
     isSequenceStillValid,
     sameCellSet,
     iconsForGroup,
     colorForGroup,
     correctFillAnswers,
+    resultCellForGroup,
+    solveProgress,
   } from '$lib/puzzleBoard.js';
   import {
     hasPlayedThisWeek,
@@ -39,6 +45,7 @@
   import { saveResult } from '$lib/resultStore.js';
   import HowToPlay from '$lib/components/HowToPlay.svelte';
   import { tap } from '$lib/iosTap.js';
+  import { playPop, unlockAudio } from '$lib/sounds.js';
 
   type Phase = 'playing' | 'finished';
 
@@ -47,12 +54,17 @@
   let selected = $state<string[]>([]);
   let solvedOrder = $state<string[]>([]);
   let fillAnswers = $state<Record<string, string>>({});
+  /** Result icons that popped onto a cell after a combine. */
+  let remnants = $state<Record<string, string>>({});
+  /** Cells cleared by a combine (path-through). */
+  let vacant = $state<string[]>([]);
+  let poppingCell = $state<string | null>(null);
   let feedback = $state('');
   let gameStartMs = $state(0);
   let elapsedSeconds = $state(0);
   let blocked = $state(false);
   let showHowTo = $state(false);
-  /** How many top-strip hints used (0–MAX_HINTS). */
+  /** How many hints used (0–MAX_HINTS). */
   let hintsUsed = $state(0);
   /** Group ids that were already hinted when the player solved them. */
   let solvedWithHint = $state<string[]>([]);
@@ -66,7 +78,7 @@
   let swiping = $state(false);
   let swipeMoved = false;
   let swipeStartId: string | null = null;
-  /** Last cell under the finger (includes solved/empty tiles for pathing). */
+  /** Last cell under the finger (includes vacant tiles for pathing). */
   let swipeCursorId: string | null = null;
   let activePointerId: number | null = null;
   /** Fill-in wedge under the pointer when a tap starts. */
@@ -74,20 +86,15 @@
 
   const hintedIds = $derived(HINT_REVEAL_ORDER.slice(0, hintsUsed));
   const hintsLeft = $derived(MAX_HINTS - hintsUsed);
-
-  /** Top strip: fur → ant → ship. Shown when solved or revealed by hint. */
-  const slots = $derived(
-    THEME.icons.map((id) => {
-      const visible = solvedOrder.includes(id) || hintedIds.includes(id);
-      if (!visible) return { id, word: null, hinted: false, solved: false };
-      return {
-        id,
-        word: id,
-        hinted: hintedIds.includes(id) && !solvedOrder.includes(id),
-        solved: solvedOrder.includes(id),
-      };
-    })
+  const movesLeft = $derived(Math.max(0, TOTAL_MOVES - solvedOrder.length));
+  const peekHints = $derived(
+    hintedIds.filter((id) => !solvedOrder.includes(id)).map((id) => ({
+      id,
+      word: GROUPS.find((g) => g.id === id)?.word ?? id,
+    }))
   );
+  const progress = $derived(solveProgress(solvedOrder));
+  const checklist = $derived([progress.fill, progress.rebus, progress.link]);
 
   function closeHowTo() {
     markHowToSeen();
@@ -99,7 +106,7 @@
     hintsUsed += 1;
     const id = HINT_REVEAL_ORDER[hintsUsed - 1];
     const group = GROUPS.find((g) => g.id === id);
-    feedback = group?.kind === 'rebus' ? 'Top rebus revealed' : 'Link revealed';
+    feedback = group?.kind === 'rebus' ? 'Rebus revealed' : 'Link revealed';
   }
 
   onMount(() => {
@@ -140,20 +147,33 @@
   }
 
   function displayWord(cellId: string): string | null {
+    if (remnants[cellId]) return remnants[cellId];
+    if (vacant.includes(cellId)) return null;
     const cell = cellById(cellId);
     if (cell.type === 'fixed') return cell.word ?? null;
     return fillAnswers[cellId] ?? null;
   }
 
-  function isSolvedCell(cellId: string) {
-    return solvedOrder.some((gid) => {
-      const g = GROUPS.find((x) => x.id === gid);
-      return g?.cells.includes(cellId);
-    });
+  function currentBoardWords() {
+    /** @type {Record<string, string | null>} */
+    const out: Record<string, string | null> = {};
+    for (const cell of BOARD) out[cell.id] = displayWord(cell.id);
+    return out;
+  }
+
+  /** Cleared cells can be crossed while swiping; result tiles stay in play. */
+  function isVacant(cellId: string) {
+    return vacant.includes(cellId) && !remnants[cellId];
+  }
+
+  function isFillChoice(cellId: string) {
+    const cell = cellById(cellId);
+    return cell.type === 'fill' && !isVacant(cellId) && !remnants[cellId];
   }
 
   /** True if this cell counts toward a soft clue (fill-ins must be the correct icon). */
   function countsForSoftClue(cellId: string) {
+    if (remnants[cellId]) return true;
     const cell = cellById(cellId);
     if (cell.type === 'fill') return fillAnswers[cellId] === cell.correct;
     return true;
@@ -170,6 +190,19 @@
       if (overlap.length < 2) continue;
       if (!best || overlap.length > best.cellIds.length) {
         best = { groupId: group.id, cellIds: overlap };
+      }
+    }
+    if (
+      GROUPS.every((g) => solvedOrder.includes(g.id)) &&
+      !solvedOrder.includes(THEME_GROUP.id)
+    ) {
+      const words = currentBoardWords();
+      const overlap = selection.filter((id) => {
+        const word = words[id];
+        return !!word && THEME.icons.includes(word);
+      });
+      if (overlap.length >= 2 && (!best || overlap.length > best.cellIds.length)) {
+        best = { groupId: THEME_GROUP.id, cellIds: overlap };
       }
     }
     return best;
@@ -200,9 +233,9 @@
     return Math.abs(A.col - B.col) + Math.abs(A.row - B.row) === 1;
   }
 
-  /** Solved tiles are empty for combining but can be crossed while swiping. */
+  /** Vacant tiles are empty for combining but can be crossed while swiping. */
   function canPathThrough(cellId: string) {
-    return isSolvedCell(cellId);
+    return isVacant(cellId);
   }
 
   /**
@@ -237,7 +270,7 @@
   }
 
   function tryAddToSwipe(cellId: string) {
-    if (!cellId || isSolvedCell(cellId)) return;
+    if (!cellId || isVacant(cellId)) return;
     if (!displayWord(cellId)) return;
 
     const existing = selected.indexOf(cellId);
@@ -249,9 +282,9 @@
       return;
     }
 
-    if (selected.length >= 3) return;
+    if (selected.length >= COMBINE_SIZE) return;
 
-    // Must be edge-adjacent to the last selected tile (or via solved path-through).
+    // Must be edge-adjacent to the last selected tile (or via vacant path-through).
     const last = selected[selected.length - 1];
     if (last && !canReachOrthogonally(last, cellId)) return;
 
@@ -293,10 +326,9 @@
   }
 
   function onTilePointerDown(event: PointerEvent, cellId: string) {
-    if (phase !== 'playing' || isSolvedCell(cellId)) return;
+    if (phase !== 'playing' || isVacant(cellId)) return;
     clearAttemptHint();
-
-    const cell = cellById(cellId);
+    unlockAudio();
 
     swiping = true;
     swipeMoved = false;
@@ -304,13 +336,13 @@
     swipeCursorId = cellId;
     activePointerId = event.pointerId;
     fillStartOption =
-      cell.type === 'fill' ? fillOptionAtPoint(cellId, event.clientX, event.clientY) : null;
+      isFillChoice(cellId) ? fillOptionAtPoint(cellId, event.clientX, event.clientY) : null;
     feedback = '';
     event.preventDefault();
 
     // Fill-in: tap a wedge to pick. Don't start a swipe path until
     // the pointer actually moves onto another tile.
-    if (cell.type === 'fill') {
+    if (isFillChoice(cellId)) {
       selected = [];
       return;
     }
@@ -342,7 +374,7 @@
       swipeStartId &&
       id !== swipeStartId &&
       displayWord(swipeStartId) &&
-      cellById(swipeStartId).type === 'fill'
+      isFillChoice(swipeStartId)
     ) {
       selected = [swipeStartId];
     }
@@ -358,7 +390,7 @@
 
     swipeCursorId = id;
 
-    // Cross solved/empty combined tiles without selecting them
+    // Cross vacant tiles without selecting them
     if (canPathThrough(id)) return;
 
     // Don't path through unfilled fill-ins
@@ -396,8 +428,7 @@
 
     // Click/tap a fill-in wedge (didn't swipe onto other tiles) → toggle that icon.
     if (startId && path.length <= 1) {
-      const cell = cellById(startId);
-      if (cell.type === 'fill' && !isSolvedCell(startId)) {
+      if (isFillChoice(startId)) {
         const option =
           startOption ||
           fillOptionAtPoint(startId, event.clientX, event.clientY) ||
@@ -407,7 +438,7 @@
       }
     }
 
-    if (path.length === 3 && isOrthogonalSelection(path)) {
+    if (path.length === COMBINE_SIZE && isOrthogonalSelection(path)) {
       selected = path;
       checkSelection();
     } else {
@@ -417,9 +448,42 @@
     }
   }
 
+  function applyCombine(group: (typeof GROUPS)[number] | typeof THEME_GROUP, attempt: string[]) {
+    if (group.id === THEME_GROUP.id) {
+      const nextVacant = [...vacant];
+      const nextRemnants = { ...remnants };
+      for (const id of attempt) {
+        delete nextRemnants[id];
+        if (!nextVacant.includes(id)) nextVacant.push(id);
+      }
+      remnants = nextRemnants;
+      vacant = nextVacant;
+      poppingCell = null;
+      playPop('clear');
+      return;
+    }
+
+    const landing = resultCellForGroup(group);
+    const nextVacant = vacant.filter((id) => !group.cells.includes(id));
+    const nextRemnants = { ...remnants };
+    for (const id of group.cells) {
+      delete nextRemnants[id];
+      if (id === landing) continue;
+      nextVacant.push(id);
+    }
+    nextRemnants[landing] = group.word;
+    remnants = nextRemnants;
+    vacant = nextVacant;
+    poppingCell = landing;
+    playPop('result');
+    setTimeout(() => {
+      if (poppingCell === landing) poppingCell = null;
+    }, 520);
+  }
+
   function checkSelection() {
     const attempt = [...selected];
-    const group = matchGroup(attempt, solvedOrder, fillAnswers);
+    const group = matchGroup(attempt, solvedOrder, fillAnswers, currentBoardWords());
 
     if (!group) {
       const maybe = GROUPS.find(
@@ -456,12 +520,13 @@
       solvedWithHint = [...solvedWithHint, group.id];
     }
 
+    applyCombine(group, attempt);
     solvedOrder = nextOrder;
     selected = [];
-    feedback = 'Nice!';
+    feedback = group.id === THEME_GROUP.id ? 'Board clear!' : 'Nice!';
 
-    if (solvedOrder.length === GROUPS.length) {
-      setTimeout(() => endGame(true), 500);
+    if (solvedOrder.length === TOTAL_MOVES) {
+      setTimeout(() => endGame(true), 650);
     }
   }
 
@@ -560,22 +625,12 @@
       </div>
     </header>
 
-    <!-- Top strip: fur → ant → ship (solved or hinted) -->
-    <div class="word-strip" aria-label="Answer strip">
-      {#each slots as slot, i}
-        <div
-          class="word-slot"
-          class:filled={!!slot.word}
-          class:hinted={slot.hinted}
-          class:solved-slot={slot.solved}
-        >
-          {#if slot.word}
-            <Icon word={slot.word} size={52} label={false} />
-          {:else}
-            <span class="slot-num">{i + 1}</span>
-          {/if}
-        </div>
-      {/each}
+    <div class="stats-row" aria-label="Puzzle status">
+      <p class="stat-moves">
+        <span class="stat-num">{movesLeft}</span>
+        <span class="stat-label">{movesLeft === 1 ? 'move' : 'moves'}</span>
+      </p>
+      <p class="stat-combine">Combine {COMBINE_SIZE}</p>
     </div>
 
     <div class="hint-row">
@@ -584,21 +639,46 @@
           <span class="life" class:lost={i >= lives} aria-hidden="true">♥</span>
         {/each}
       </div>
-      <button
-        type="button"
-        class="hint-btn"
-        disabled={phase !== 'playing' || hintsLeft <= 0}
-        aria-label={hintsLeft > 0 ? `Use hint, ${hintsLeft} left` : 'No hints left'}
-        {...(phase === 'playing' && hintsLeft > 0 ? tap(useHint) : {})}
-      >
-        <span class="hint-label">Hint</span>
-        <span class="hint-dots" aria-hidden="true">
-          {#each Array(MAX_HINTS) as _, i}
-            <span class="hint-dot" class:used={i < hintsUsed}></span>
-          {/each}
-        </span>
-      </button>
+      <div class="hint-cluster">
+        {#if peekHints.length}
+          <div class="hint-peeks" aria-label="Revealed hints">
+            {#each peekHints as peek}
+              <span class="hint-peek">
+                <Icon word={peek.word} size={28} label={false} />
+              </span>
+            {/each}
+          </div>
+        {/if}
+        <button
+          type="button"
+          class="hint-btn"
+          disabled={phase !== 'playing' || hintsLeft <= 0}
+          aria-label={hintsLeft > 0 ? `Use hint, ${hintsLeft} left` : 'No hints left'}
+          {...(phase === 'playing' && hintsLeft > 0 ? tap(useHint) : {})}
+        >
+          <span class="hint-label">Hint</span>
+          <span class="hint-dots" aria-hidden="true">
+            {#each Array(MAX_HINTS) as _, i}
+              <span class="hint-dot" class:used={i < hintsUsed}></span>
+            {/each}
+          </span>
+        </button>
+      </div>
     </div>
+
+    <ul class="checklist" aria-label="Pieces solved">
+      {#each checklist as item}
+        {@const complete = item.done >= item.total && item.total > 0}
+        <li
+          class="check-item"
+          class:complete
+          aria-label={`${item.label} ${item.done} of ${item.total}${complete ? ', complete' : ''}`}
+        >
+          <span class="check-mark" aria-hidden="true">{complete ? '✓' : ''}</span>
+          {item.label}: {item.done}/{item.total}
+        </li>
+      {/each}
+    </ul>
 
     <!-- 3×3 board — icons only -->
     <div
@@ -609,9 +689,11 @@
     >
       {#each BOARD as cell}
         {@const word = displayWord(cell.id)}
+        {@const fillChoice = isFillChoice(cell.id)}
         {@const isFill = cell.type === 'fill'}
         {@const isSelected = selected.includes(cell.id)}
-        {@const solved = isSolvedCell(cell.id)}
+        {@const vacantTile = isVacant(cell.id)}
+        {@const popping = poppingCell === cell.id}
         {@const inAttemptHint = !!attemptHint?.cellIds.includes(cell.id)}
         {@const attemptTint =
           inAttemptHint && attemptHint ? colorForGroup(attemptHint.groupId) : ''}
@@ -619,31 +701,35 @@
         <div
           class="tile"
           class:selected={isSelected}
-          class:solved
-          class:empty-fill={!word && isFill}
-          class:filled-fill={!!word && isFill}
-          class:fill-choice={isFill && !solved}
-          class:has-pick={isFill && !!word && !solved}
+          class:vacant={vacantTile}
+          class:popping
+          class:empty-fill={!word && isFill && fillChoice}
+          class:filled-fill={!!word && isFill && fillChoice}
+          class:fill-choice={fillChoice}
+          class:has-pick={fillChoice && !!word}
           class:attempt-hint={inAttemptHint}
           class:tint-fur={attemptHint?.groupId === 'fur' && inAttemptHint}
           class:tint-ant={attemptHint?.groupId === 'ant' && inAttemptHint}
           class:tint-ship={attemptHint?.groupId === 'ship' && inAttemptHint}
+          class:tint-friendship={attemptHint?.groupId === 'friendship' && inAttemptHint}
           style={attemptTint ? `--group-tint: ${attemptTint}` : ''}
           data-cell-id={cell.id}
           role="gridcell"
           aria-label={
             word
               ? word
-              : isFill
-                ? `Fill-in, choose ${cell.options?.join(', ') ?? 'an icon'}`
-                : `Fill-in ${cell.id}`
+              : vacantTile
+                ? 'Empty tile'
+                : fillChoice
+                  ? `Fill-in, choose ${cell.options?.join(', ') ?? 'an icon'}`
+                  : `Empty ${cell.id}`
           }
           onpointerdown={(e) => onTilePointerDown(e, cell.id)}
         >
           {#if isSelected}
             <span class="swipe-order">{selectIndex + 1}</span>
           {/if}
-          {#if isFill && !solved}
+          {#if fillChoice}
             <div class="fill-split">
               {#each cell.options ?? [] as option, i}
                 <span
@@ -769,12 +855,115 @@
     }
   }
 
+  .stats-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0 0 0.85rem;
+    padding: 0 0.1rem;
+  }
+
+  .stat-moves,
+  .stat-combine {
+    margin: 0;
+    color: var(--gist-text-muted);
+    font-weight: 650;
+    letter-spacing: 0.02em;
+  }
+
+  .stat-num {
+    display: inline-block;
+    color: var(--gist-text);
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1;
+    border-bottom: 2px solid var(--gist-text);
+    padding: 0 0.05rem 0.05rem;
+    margin-right: 0.35rem;
+  }
+
+  .stat-label,
+  .stat-combine {
+    font-size: 1.05rem;
+  }
+
   .hint-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
     margin: 0 0 0.65rem;
+  }
+
+  .hint-cluster {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .hint-peeks {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .hint-peek {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    border: 1.5px dashed var(--gist-border-strong);
+    background: var(--gist-surface-alt);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .checklist {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.35rem 1.15rem;
+    list-style: none;
+    margin: 0 0 0.75rem;
+    padding: 0.15rem 0.1rem 0;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    color: var(--gist-text-muted);
+    white-space: nowrap;
+  }
+
+  .check-item.complete {
+    color: var(--gist-text);
+  }
+
+  .check-mark {
+    width: 1.05rem;
+    height: 1.05rem;
+    border: 1.5px solid var(--gist-border-strong);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1;
+    flex-shrink: 0;
+    background: var(--gist-surface);
+  }
+
+  .check-item.complete .check-mark {
+    background: var(--gist-primary);
+    border-color: var(--gist-primary);
+    color: var(--gist-on-primary);
   }
 
   .lives-row {
@@ -836,47 +1025,6 @@
 
   .hint-dot.used {
     background: var(--gist-primary);
-  }
-
-  .word-strip {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-  }
-
-  .word-slot {
-    aspect-ratio: 1;
-    border: 1.5px solid var(--gist-slot-border);
-    border-radius: 50%;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--gist-slot);
-  }
-
-  .word-slot.filled {
-    border-color: var(--gist-tile-border);
-    background: var(--gist-tile);
-  }
-
-  .word-slot.hinted {
-    border-color: var(--gist-border-strong);
-    border-style: dashed;
-    background: var(--gist-surface-alt);
-  }
-
-  .word-slot.solved-slot {
-    border-style: solid;
-    border-color: var(--gist-tile-border);
-    background: var(--gist-tile);
-  }
-
-  .slot-num {
-    color: var(--gist-border-strong);
-    font-weight: 700;
-    font-size: 1.1rem;
   }
 
   .board {
@@ -1040,8 +1188,29 @@
     justify-content: center;
   }
 
-  .tile.solved {
-    opacity: 0.4;
+  .tile.vacant {
+    background: var(--gist-tile-muted);
+    border-style: dashed;
+    border-color: var(--gist-muted-line);
+    opacity: 0.55;
+  }
+
+  .tile.popping :global(.icon) {
+    animation: tile-pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+  }
+
+  @keyframes tile-pop {
+    0% {
+      transform: scale(0.2);
+      opacity: 0;
+    }
+    70% {
+      transform: scale(1.12);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+    }
   }
 
   .tile.attempt-hint {
@@ -1060,6 +1229,10 @@
 
   .tile.tint-ship {
     --group-tint: #00008b;
+  }
+
+  .tile.tint-friendship {
+    --group-tint: #5e8fb6;
   }
 
   .feedback {

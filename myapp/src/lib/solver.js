@@ -7,4 +7,4 @@
  *   links  — related icons form a category
  *   fill   — blank tile; player picks from 3 options
  */
-export { matchGroup, sameCellSet, isSequenceStillValid } from './puzzleBoard.js';
+export { matchGroup, sameCellSet, isSequenceStillValid, THEME_GROUP } from './puzzleBoard.js';

@@ -6,7 +6,7 @@
 const USERNAME_KEY = 'gist_username';
 const HISTORY_KEY = 'gist_history';
 const COLLECTIBLES_KEY = 'gist_collectibles';
-const HOWTO_SEEN_KEY = 'gist_howto_seen';
+const HOWTO_SEEN_KEY = 'gist_howto_seen_v2';
 
 function hasStorage() {
   return typeof window !== 'undefined' && !!window.localStorage;
@@ -148,8 +148,9 @@ export function validateUsername(name) {
  * Points for the weekly scoreboard (0–100).
  * No time penalty. Based on groups solved clean vs with a hint, minus lives lost.
  *
- * - Clean group (solved before that answer was hinted): 34
- * - Hinted group (top-strip hint revealed it first): 17
+ * Four combines (3 board groups + leftover theme). Perfect run = 100.
+ * - Clean group (solved before that answer was hinted): 25
+ * - Hinted group (hint revealed it first): 12
  * - Each life lost: −8
  */
 export function computePoints({
@@ -161,7 +162,7 @@ export function computePoints({
   let points = 0;
 
   for (const id of solvedGroupIds || []) {
-    points += hinted.has(id) ? 17 : 34;
+    points += hinted.has(id) ? 12 : 25;
   }
 
   points -= Math.max(0, livesLost) * 8;

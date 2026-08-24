@@ -12,18 +12,19 @@
  *   ant colony     [fill anthill] queen ant
  *
  * Groups (order inside each group does not matter):
- *   mink + rabbit + fox = fur                         → [a1,a2,b2]
- *   anthill + ant colony + queen ant = ant            → [a3,b3,c3]
- *   shh + she + hip = ship                            → [c2,c1,b1]  (board rebus)
+ *   mink + rabbit + fox = fur                         → [a1,a2,b2]  result at b2
+ *   anthill + ant colony + queen ant = ant            → [a3,b3,c3]  result at c3
+ *   shh + she + hip = ship                            → [c2,c1,b1]  result at c2
  *
- * Theme (shown on results):
+ * Theme (final combine on the leftover tiles):
  *   fur + ant + ship = friendship
  *
- * Each group is orthogonally connected, so any solve order is valid.
+ * After a group is solved, two tiles clear and the result pops onto
+ * that group's result cell. Combine until the board is empty (4 moves).
  */
 
 /** @typedef {{ id: string; type: 'fixed'|'fill'; word?: string; options?: string[]; correct?: string }} Cell */
-/** @typedef {{ id: string; word: string; kind: 'link'|'rebus'; cells: string[] }} Group */
+/** @typedef {{ id: string; word: string; kind: 'link'|'rebus'; cells: string[]; resultCell?: string }} Group */
 
 /** @type {Cell[]} */
 export const BOARD = [
@@ -54,9 +55,9 @@ export const BOARD = [
 /** Answer groups — cell-id order is the results equation (matching is unordered). */
 /** @type {Group[]} */
 export const GROUPS = [
-  { id: 'fur', word: 'fur', kind: 'link', cells: ['a1', 'a2', 'b2'] },
-  { id: 'ant', word: 'ant', kind: 'link', cells: ['a3', 'b3', 'c3'] },
-  { id: 'ship', word: 'ship', kind: 'rebus', cells: ['c2', 'c1', 'b1'] },
+  { id: 'fur', word: 'fur', kind: 'link', cells: ['a1', 'a2', 'b2'], resultCell: 'b2' },
+  { id: 'ant', word: 'ant', kind: 'link', cells: ['a3', 'b3', 'c3'], resultCell: 'c3' },
+  { id: 'ship', word: 'ship', kind: 'rebus', cells: ['c2', 'c1', 'b1'], resultCell: 'c2' },
 ];
 
 /** Final theme shown on results: fur + ant + ship = friendship */
@@ -65,12 +66,23 @@ export const THEME = {
   icons: ['fur', 'ant', 'ship'],
 };
 
+/** Fourth combine — leftover result tiles, matched by icon not cell id. */
+export const THEME_GROUP = {
+  id: 'friendship',
+  word: 'friendship',
+  kind: 'rebus',
+  cells: /** @type {string[]} */ ([]),
+};
+
 /**
- * Top-strip hint reveal order (not board tiles).
+ * Hint reveal order (not board tiles).
  * Hint 1 → fur (link), Hint 2 → ant (link), Hint 3 → ship (rebus).
  */
 export const HINT_REVEAL_ORDER = ['fur', 'ant', 'ship'];
 export const MAX_HINTS = 3;
+export const COMBINE_SIZE = 3;
+/** Three board groups + the leftover theme combine. */
+export const TOTAL_MOVES = GROUPS.length + 1;
 
 /**
  * Post-attempt tint when ≥2 tiles in a failed swipe belong to one unsolved group.
@@ -80,6 +92,7 @@ export const GROUP_COLORS = {
   ship: '#00008B',
   fur: '#0000CD',
   ant: '#ADD8E6',
+  friendship: '#5e8fb6',
 };
 
 /** @param {string} cellId */
@@ -93,18 +106,30 @@ export function colorForGroup(groupId) {
   return GROUP_COLORS[groupId] ?? null;
 }
 
+/** @param {Group} group */
+export function resultCellForGroup(group) {
+  return group.resultCell || group.cells[group.cells.length - 1];
+}
+
 /**
- * Allowed sequences for solving the three groups (by group id).
- * All orders are valid — each group is an orthogonal L or row.
+ * First three groups may be solved in any order; the theme combine is last.
+ * @param {string[]} solvedOrder
  */
-export const VALID_SEQUENCES = [
-  ['fur', 'ant', 'ship'],
-  ['fur', 'ship', 'ant'],
-  ['ant', 'fur', 'ship'],
-  ['ant', 'ship', 'fur'],
-  ['ship', 'fur', 'ant'],
-  ['ship', 'ant', 'fur'],
-];
+export function isSequenceStillValid(solvedOrder) {
+  const boardIds = GROUPS.map((g) => g.id);
+  const seen = new Set();
+  for (let i = 0; i < solvedOrder.length; i++) {
+    const id = solvedOrder[i];
+    if (id === THEME_GROUP.id) {
+      if (i !== solvedOrder.length - 1) return false;
+      if (seen.size !== boardIds.length) return false;
+      continue;
+    }
+    if (!boardIds.includes(id) || seen.has(id)) return false;
+    seen.add(id);
+  }
+  return true;
+}
 
 export const COLLECTIBLE = {
   number: '004',
@@ -133,8 +158,15 @@ export function sameCellSet(a, b) {
 /**
  * If `selectedIds` matches an unsolved group, return that group.
  * Fill-in cells in the group must already have the correct answer.
+ * After the three board groups are solved, three leftover result icons
+ * matching the theme also count.
+ *
+ * @param {string[]} selectedIds
+ * @param {string[]} solvedGroupIds
+ * @param {Record<string, string>} fillAnswers
+ * @param {Record<string, string | null>} [boardWords]
  */
-export function matchGroup(selectedIds, solvedGroupIds, fillAnswers) {
+export function matchGroup(selectedIds, solvedGroupIds, fillAnswers, boardWords) {
   for (const group of GROUPS) {
     if (solvedGroupIds.includes(group.id)) continue;
     if (!sameCellSet(selectedIds, group.cells)) continue;
@@ -148,21 +180,52 @@ export function matchGroup(selectedIds, solvedGroupIds, fillAnswers) {
 
     return group;
   }
+
+  if (
+    GROUPS.every((g) => solvedGroupIds.includes(g.id)) &&
+    !solvedGroupIds.includes(THEME_GROUP.id) &&
+    selectedIds.length === COMBINE_SIZE &&
+    boardWords
+  ) {
+    const words = selectedIds.map((id) => boardWords[id]).filter(Boolean);
+    if (sameCellSet(words, THEME.icons)) return THEME_GROUP;
+  }
+
   return null;
 }
 
+/** Fill-in cells — counted solved only after their group is combined. */
+export const FILL_CELL_IDS = BOARD.filter((c) => c.type === 'fill').map((c) => c.id);
+export const LINK_GROUP_IDS = GROUPS.filter((g) => g.kind === 'link').map((g) => g.id);
+export const REBUS_GROUP_IDS = [
+  ...GROUPS.filter((g) => g.kind === 'rebus').map((g) => g.id),
+  THEME_GROUP.id,
+];
+
 /**
- * After a correct group is solved, check that the sequence of solved groups
- * so far is still a prefix of at least one valid sequence.
+ * In-game checklist totals.
+ * Fill-ins increment only when the 3-icon group that includes that
+ * fill-in is solved — picking an option alone does not count.
+ * @param {string[]} solvedOrder
  */
-export function isSequenceStillValid(solvedOrder) {
-  return VALID_SEQUENCES.some((seq) =>
-    solvedOrder.every((id, i) => seq[i] === id)
-  );
+export function solveProgress(solvedOrder) {
+  const solved = new Set(solvedOrder);
+  const fillDone = FILL_CELL_IDS.filter((id) => {
+    const group = GROUPS.find((g) => g.cells.includes(id));
+    return !!group && solved.has(group.id);
+  }).length;
+  const linkDone = LINK_GROUP_IDS.filter((id) => solved.has(id)).length;
+  const rebusDone = REBUS_GROUP_IDS.filter((id) => solved.has(id)).length;
+  return {
+    fill: { done: fillDone, total: FILL_CELL_IDS.length, label: 'Fill-ins' },
+    rebus: { done: rebusDone, total: REBUS_GROUP_IDS.length, label: 'Rebuses' },
+    link: { done: linkDone, total: LINK_GROUP_IDS.length, label: 'Links' },
+  };
 }
 
 /** Icon words for a group, using correct fill-in answers. */
 export function iconsForGroup(group) {
+  if (group.id === THEME_GROUP.id) return [...THEME.icons];
   return group.cells.map((id) => {
     const cell = BOARD.find((c) => c.id === id);
     if (!cell) return '';

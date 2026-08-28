@@ -6,14 +6,11 @@
    */
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import Icon from '$lib/components/Icon.svelte';
   import { loadResult, saveResult, formatTime } from '$lib/resultStore.js';
-  import {
-    GROUPS,
-    THEME,
-    COLLECTIBLE,
-    iconsForGroup,
-  } from '$lib/puzzleBoard.js';
+  import { answerKey } from '$lib/puzzleBoard.js';
+  import { getPuzzle, getCurrentPuzzle, PUZZLES } from '$lib/puzzles.js';
   import {
     getUsername,
     setUsername,
@@ -22,6 +19,7 @@
     getLocalCollectibles,
     addLocalCollectible,
     hasPlayedThisWeek,
+    hasPlayedArchive,
   } from '$lib/player.js';
   import { tap } from '$lib/iosTap.js';
 
@@ -31,6 +29,8 @@
     points?: number;
     username?: string;
     weekKey?: string;
+    puzzleId?: string;
+    archive?: boolean;
     scoreSaved?: boolean;
     answers: { word: string; cells: string[]; icons: string[] }[];
     collectible?: { number: string; word: string } | null;
@@ -42,51 +42,75 @@
   let saveMessage = $state('');
   let collectibles = $state<{ number: string; word: string }[]>([]);
 
-  function defaultAnswers() {
-    return [
-      ...GROUPS.map((g) => ({
-        word: g.word,
-        cells: [...g.cells],
-        icons: iconsForGroup(g),
-      })),
-      {
-        word: THEME.word,
-        cells: [] as string[],
-        icons: [...THEME.icons],
-      },
-    ];
+  const requestedId = $derived(page.url.searchParams.get('id'));
+  const resultPuzzle = $derived(
+    getPuzzle(result?.puzzleId) || getPuzzle(requestedId) || getCurrentPuzzle()
+  );
+
+  function catalogCollectible(number: string | undefined) {
+    if (!number) return null;
+    return PUZZLES.find((p) => p.COLLECTIBLE.number === number)?.COLLECTIBLE ?? null;
   }
 
-  function normalizeResult(raw: typeof result) {
+  function defaultAnswers(puzzle = resultPuzzle) {
+    return answerKey(puzzle);
+  }
+
+  function normalizeResult(raw: typeof result, puzzle = resultPuzzle) {
     if (!raw) return null;
-    // Always use the current answer key so a stale saved result
-    // (e.g. picnic) cannot keep showing the old theme.
-    const collectible = raw.won ? COLLECTIBLE : (raw.collectible ?? null);
-    return { ...raw, answers: defaultAnswers(), collectible };
+    const catalog = raw.won
+      ? (getPuzzle(raw.puzzleId)?.COLLECTIBLE ?? puzzle.COLLECTIBLE)
+      : (raw.collectible ?? null);
+    return { ...raw, answers: defaultAnswers(puzzle), collectible: catalog };
   }
 
   onMount(() => {
-    result = normalizeResult(loadResult());
-    // If they already played this week but storage was cleared, still show answers.
-    if (!result && hasPlayedThisWeek()) {
+    const stored = loadResult();
+    const urlPuzzle = getPuzzle(requestedId);
+    const storedPuzzle = getPuzzle(stored?.puzzleId);
+
+    if (urlPuzzle && stored?.puzzleId === urlPuzzle.id) {
+      result = normalizeResult(stored, urlPuzzle);
+    } else if (urlPuzzle && hasPlayedArchive(urlPuzzle.id)) {
       result = {
         won: true,
-        elapsedSeconds: 0,
-        points: 0,
+        elapsedSeconds: stored?.puzzleId === urlPuzzle.id ? stored.elapsedSeconds : 0,
+        points: stored?.puzzleId === urlPuzzle.id ? stored.points : 0,
         username: getUsername() || '',
-        scoreSaved: false,
-        answers: defaultAnswers(),
-        collectible: COLLECTIBLE,
+        puzzleId: urlPuzzle.id,
+        archive: true,
+        scoreSaved: true,
+        answers: defaultAnswers(urlPuzzle),
+        collectible: urlPuzzle.COLLECTIBLE,
       };
+    } else if (!requestedId) {
+      result = normalizeResult(stored, storedPuzzle || getCurrentPuzzle());
+      if (!result && hasPlayedThisWeek()) {
+        const current = getCurrentPuzzle();
+        result = {
+          won: true,
+          elapsedSeconds: 0,
+          points: 0,
+          username: getUsername() || '',
+          puzzleId: current.id,
+          scoreSaved: false,
+          answers: defaultAnswers(current),
+          collectible: current.COLLECTIBLE,
+        };
+      }
+    } else {
+      result = null;
     }
+
     if (result) saveResult(result);
     usernameDraft = result?.username || getUsername() || '';
-    scoreSaved = !!result?.scoreSaved;
+    scoreSaved = !!result?.scoreSaved || !!result?.archive;
     collectibles = getLocalCollectibles();
 
     // Puzzle page may finish the scoreboard POST after navigation.
     const poll = setInterval(() => {
-      const latest = normalizeResult(loadResult());
+      if (result?.archive) return;
+      const latest = normalizeResult(loadResult(), storedPuzzle || getCurrentPuzzle());
       if (!latest) return;
       if (latest.scoreSaved && !scoreSaved) {
         scoreSaved = true;
@@ -171,10 +195,10 @@
     {#if !result}
       <div class="panel">
         <h1>No result yet</h1>
-        <p class="sub">Play this week’s puzzle first.</p>
+        <p class="sub">Play this week’s puzzle first, or open a past board from the archive.</p>
         <div class="actions">
           <button type="button" class="btn-primary" {...tap(() => goto('/puzzle'))}>Play</button>
-          <button type="button" class="btn-secondary" {...tap(() => goto('/'))}>Home</button>
+          <button type="button" class="btn-secondary" {...tap(() => goto('/archive'))}>Archive</button>
         </div>
       </div>
     {:else}
@@ -186,7 +210,9 @@
         <p class="score-value">{result.points ?? 0}</p>
       </div>
 
-      {#if scoreSaved}
+      {#if result.archive}
+        <p class="username-line">Archive play — not on this week’s scoreboard.</p>
+      {:else if scoreSaved}
         <p class="username-line">
           On the scoreboard as <strong>{result.username || usernameDraft}</strong>
         </p>
@@ -229,7 +255,13 @@
             <Icon word={result.collectible.word} size={96} label={false} />
           </div>
           <p class="card-time">
-            {scoreSaved ? `Saved to ${result.username || usernameDraft}` : 'Save your score to keep this on the board'}
+            {#if result.archive}
+              Added to your collection
+            {:else if scoreSaved}
+              Saved to {result.username || usernameDraft}
+            {:else}
+              Save your score to keep this on the board
+            {/if}
           </p>
         </div>
       {/if}
@@ -239,7 +271,7 @@
           <h2>Your collectibles</h2>
           <div class="collection-row">
             {#each collectibles as c}
-              {@const card = c.number === COLLECTIBLE.number ? COLLECTIBLE : c}
+              {@const card = catalogCollectible(c.number) ?? c}
               <div class="mini-card">
                 <Icon word={card.word} size={40} label={false} />
                 <span>#{card.number}</span>
@@ -251,37 +283,30 @@
 
       <div class="answers">
         <h2>Answers</h2>
-        {#each GROUPS as group}
-          <div class="answer-row">
+        {#each result.answers as row, index}
+          <div class="answer-row" class:theme-row={index === result.answers.length - 1}>
             <div class="answer-result">
-              <Icon word={group.word} size={48} label={true} />
+              <Icon word={row.word} size={48} label={true} />
             </div>
             <span class="eq">=</span>
             <div class="answer-parts">
-              {#each iconsForGroup(group) as icon, i}
+              {#each row.icons as icon, i}
                 {#if i > 0}<span class="plus">+</span>{/if}
                 <Icon word={icon} size={40} label={true} />
               {/each}
             </div>
           </div>
         {/each}
-        <div class="answer-row theme-row">
-          <div class="answer-result">
-            <Icon word={THEME.word} size={48} label={true} />
-          </div>
-          <span class="eq">=</span>
-          <div class="answer-parts">
-            {#each THEME.icons as icon, i}
-              {#if i > 0}<span class="plus">+</span>{/if}
-              <Icon word={icon} size={40} label={true} />
-            {/each}
-          </div>
-        </div>
       </div>
 
       <div class="actions">
-        <button type="button" class="btn-primary" {...tap(() => goto('/leaderboard'))}>Scoreboard</button>
-        <button type="button" class="btn-secondary" {...tap(() => goto('/'))}>Home</button>
+        {#if result.archive}
+          <button type="button" class="btn-primary" {...tap(() => goto('/archive'))}>Archive</button>
+          <button type="button" class="btn-secondary" {...tap(() => goto('/'))}>Home</button>
+        {:else}
+          <button type="button" class="btn-primary" {...tap(() => goto('/leaderboard'))}>Scoreboard</button>
+          <button type="button" class="btn-secondary" {...tap(() => goto('/'))}>Home</button>
+        {/if}
       </div>
     {/if}
   </div>

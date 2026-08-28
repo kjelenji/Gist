@@ -7,6 +7,7 @@ const USERNAME_KEY = 'gist_username';
 const HISTORY_KEY = 'gist_history';
 const COLLECTIBLES_KEY = 'gist_collectibles';
 const HOWTO_SEEN_KEY = 'gist_howto_seen_v2';
+const ARCHIVE_KEY = 'gist_archive_plays';
 
 function hasStorage() {
   return typeof window !== 'undefined' && !!window.localStorage;
@@ -103,6 +104,40 @@ export function hasPlayedToday() {
 /** @deprecated use markPlayedThisWeek */
 export function markPlayedToday() {
   markPlayedThisWeek();
+}
+
+function getArchivePlaysRaw() {
+  if (!hasStorage()) return [];
+  try {
+    const raw = window.localStorage.getItem(ARCHIVE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Puzzle ids this browser has finished in the archive. */
+export function getArchivePlays() {
+  return getArchivePlaysRaw();
+}
+
+/** @param {string} puzzleId */
+export function hasPlayedArchive(puzzleId) {
+  if (!puzzleId) return false;
+  return getArchivePlaysRaw().some((entry) => entry.puzzleId === puzzleId);
+}
+
+/** @param {string} puzzleId @param {{ won?: boolean }} [info] */
+export function markPlayedArchive(puzzleId, info = {}) {
+  if (!hasStorage() || !puzzleId) return;
+  const history = getArchivePlaysRaw().filter((e) => e.puzzleId !== puzzleId);
+  history.unshift({
+    puzzleId,
+    won: !!info.won,
+    playedAt: Date.now(),
+  });
+  window.localStorage.setItem(ARCHIVE_KEY, JSON.stringify(history.slice(0, 50)));
 }
 
 export function getLocalCollectibles() {

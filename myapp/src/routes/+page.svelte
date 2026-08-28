@@ -197,6 +197,9 @@
             <button type="button" class="btn-group btn-secondary" {...tap(() => goto('/result'))}>
               Result
             </button>
+            <button type="button" class="btn-group btn-secondary" {...tap(() => goto('/archive'))}>
+              Archive
+            </button>
           </div>
         </div>
 

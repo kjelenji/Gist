@@ -9,33 +9,29 @@
    */
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import Icon from '$lib/components/Icon.svelte';
+  import { iconLabel } from '$lib/icons.js';
   import {
-    BOARD,
-    GROUPS,
-    THEME,
-    COLLECTIBLE,
-    THEME_GROUP,
-    MAX_LIVES,
-    HINT_REVEAL_ORDER,
-    MAX_HINTS,
-    TOTAL_MOVES,
-    COMBINE_SIZE,
     matchGroup,
     isSequenceStillValid,
     sameCellSet,
-    iconsForGroup,
     colorForGroup,
     correctFillAnswers,
     resultCellForGroup,
     solveProgress,
+    answerKey,
   } from '$lib/puzzleBoard.js';
+  import {
+    getPuzzle,
+    getCurrentPuzzle,
+    CURRENT_PUZZLE_ID,
+  } from '$lib/puzzles.js';
   import {
     hasPlayedThisWeek,
     markPlayedThisWeek,
+    markPlayedArchive,
     ensureUsername,
-    generateUsername,
-    setUsername,
     computePoints,
     addLocalCollectible,
     weekKey,
@@ -49,8 +45,23 @@
 
   type Phase = 'playing' | 'finished';
 
+  const requestedId = $derived(page.url.searchParams.get('id'));
+  const archive = $derived(!!requestedId && requestedId !== CURRENT_PUZZLE_ID);
+  const puzzle = $derived(requestedId ? getPuzzle(requestedId) : getCurrentPuzzle());
+
+  const BOARD = $derived(puzzle?.BOARD ?? []);
+  const GROUPS = $derived(puzzle?.GROUPS ?? []);
+  const THEME = $derived(puzzle?.THEME ?? { word: '', icons: [] });
+  const THEME_GROUP = $derived(puzzle?.THEME_GROUP ?? { id: '', word: '', kind: 'rebus', cells: [] });
+  const COLLECTIBLE = $derived(puzzle?.COLLECTIBLE ?? { number: '', word: '' });
+  const HINT_REVEAL_ORDER = $derived(puzzle?.HINT_REVEAL_ORDER ?? []);
+  const MAX_LIVES = $derived(puzzle?.MAX_LIVES ?? 3);
+  const MAX_HINTS = $derived(puzzle?.MAX_HINTS ?? 3);
+  const TOTAL_MOVES = $derived(puzzle?.TOTAL_MOVES ?? 4);
+  const COMBINE_SIZE = $derived(puzzle?.COMBINE_SIZE ?? 3);
+
   let phase = $state<Phase>('playing');
-  let lives = $state(MAX_LIVES);
+  let lives = $state(3);
   let selected = $state<string[]>([]);
   let solvedOrder = $state<string[]>([]);
   let fillAnswers = $state<Record<string, string>>({});
@@ -93,7 +104,11 @@
       word: GROUPS.find((g) => g.id === id)?.word ?? id,
     }))
   );
-  const progress = $derived(solveProgress(solvedOrder));
+  const progress = $derived(puzzle ? solveProgress(puzzle, solvedOrder) : {
+    fill: { done: 0, total: 0, label: 'Fill-ins' },
+    rebus: { done: 0, total: 0, label: 'Rebuses' },
+    link: { done: 0, total: 0, label: 'Links' },
+  });
   const checklist = $derived([progress.fill, progress.rebus, progress.link]);
 
   function closeHowTo() {
@@ -110,7 +125,7 @@
   }
 
   onMount(() => {
-    if (hasPlayedThisWeek()) {
+    if (!archive && hasPlayedThisWeek()) {
       blocked = true;
       goto('/result');
       return;
@@ -483,7 +498,8 @@
 
   function checkSelection() {
     const attempt = [...selected];
-    const group = matchGroup(attempt, solvedOrder, fillAnswers, currentBoardWords());
+    if (!puzzle) return;
+    const group = matchGroup(puzzle, attempt, solvedOrder, fillAnswers, currentBoardWords());
 
     if (!group) {
       const maybe = GROUPS.find(
@@ -503,7 +519,7 @@
     }
 
     const nextOrder = [...solvedOrder, group.id];
-    if (!isSequenceStillValid(nextOrder)) {
+    if (!isSequenceStillValid(puzzle, nextOrder)) {
       lives -= 1;
       attemptHint = findPartialAttemptHint(attempt);
       feedback = attemptHint
@@ -531,7 +547,7 @@
   }
 
   async function endGame(won: boolean) {
-    if (phase === 'finished') return;
+    if (phase === 'finished' || !puzzle) return;
     phase = 'finished';
     const elapsed = Math.floor((Date.now() - gameStartMs) / 1000);
     elapsedSeconds = elapsed;
@@ -545,38 +561,35 @@
     });
     const collectible = won ? COLLECTIBLE : null;
     const week = weekKey();
+    const answers = answerKey(puzzle);
+    const fills = correctFillAnswers(puzzle);
 
-    markPlayedThisWeek();
+    if (archive) {
+      markPlayedArchive(puzzle.id, { won });
+    } else {
+      markPlayedThisWeek();
+    }
     if (collectible) addLocalCollectible(collectible);
 
     // Save result first so /result always has the card + answer key,
     // even if the scoreboard request is slow or fails.
-    const answers = [
-      ...GROUPS.map((g) => ({
-        word: g.word,
-        cells: [...g.cells],
-        icons: iconsForGroup(g),
-      })),
-      {
-        word: THEME.word,
-        cells: [],
-        icons: [...THEME.icons],
-      },
-    ];
-
     saveResult({
       won,
       elapsedSeconds: elapsed,
       points,
       username,
       weekKey: week,
-      scoreSaved: false,
+      puzzleId: puzzle.id,
+      archive,
+      scoreSaved: archive ? true : false,
       answers,
-      fillAnswers: correctFillAnswers(),
+      fillAnswers: fills,
       collectible,
     });
 
-    goto('/result');
+    goto(archive ? `/result?id=${encodeURIComponent(puzzle.id)}` : '/result');
+
+    if (archive) return;
 
     // Persist points + collectible to Supabase in the background.
     try {
@@ -592,9 +605,11 @@
           points,
           username,
           weekKey: week,
+          puzzleId: puzzle.id,
+          archive: false,
           scoreSaved: true,
           answers,
-          fillAnswers: correctFillAnswers(),
+          fillAnswers: fills,
           collectible,
         });
       }
@@ -608,12 +623,22 @@
   <main class="page page-center">
     <p class="feedback muted">Redirecting…</p>
   </main>
+{:else if !puzzle}
+  <main class="page page-center">
+    <div class="puzzle-container">
+      <p class="feedback">That puzzle is not in the archive.</p>
+      <div class="actions">
+        <button type="button" class="btn-secondary" {...tap(() => goto('/archive'))}>Archive</button>
+        <button type="button" class="btn-secondary" {...tap(() => goto('/'))}>Home</button>
+      </div>
+    </div>
+  </main>
 {:else}
 <main class="page">
   <div class="puzzle-container">
     <header class="header">
       <div class="title-row">
-        <h1>gist</h1>
+        <h1>{archive ? 'archive' : 'gist'}</h1>
         <button
           type="button"
           class="help-btn"
@@ -696,7 +721,9 @@
         {@const popping = poppingCell === cell.id}
         {@const inAttemptHint = !!attemptHint?.cellIds.includes(cell.id)}
         {@const attemptTint =
-          inAttemptHint && attemptHint ? colorForGroup(attemptHint.groupId) : ''}
+          inAttemptHint && attemptHint && puzzle
+            ? colorForGroup(puzzle, attemptHint.groupId)
+            : ''}
         {@const selectIndex = selected.indexOf(cell.id)}
         <div
           class="tile"
@@ -708,10 +735,6 @@
           class:fill-choice={fillChoice}
           class:has-pick={fillChoice && !!word}
           class:attempt-hint={inAttemptHint}
-          class:tint-fur={attemptHint?.groupId === 'fur' && inAttemptHint}
-          class:tint-ant={attemptHint?.groupId === 'ant' && inAttemptHint}
-          class:tint-ship={attemptHint?.groupId === 'ship' && inAttemptHint}
-          class:tint-friendship={attemptHint?.groupId === 'friendship' && inAttemptHint}
           style={attemptTint ? `--group-tint: ${attemptTint}` : ''}
           data-cell-id={cell.id}
           role="gridcell"
@@ -740,9 +763,12 @@
                   class:picked={word === option}
                   data-fill-option={option}
                 >
-                  <span class="fill-chip">
-                    <Icon word={option} size={44} label={false} />
+                  <span class="fill-body">
+                    <span class="fill-chip">
+                      <Icon word={option} size={44} label={false} tip={false} />
+                    </span>
                   </span>
+                  <span class="fill-tip">{iconLabel(option)}</span>
                 </span>
               {/each}
               <svg class="fill-lines" viewBox="0 0 100 100" aria-hidden="true">
@@ -779,7 +805,9 @@
               feedback = '';
             }))}
       >Clear</button>
-      <button type="button" class="btn-secondary" {...tap(() => goto('/'))}>Home</button>
+      <button type="button" class="btn-secondary" {...tap(() => goto(archive ? '/archive' : '/'))}>
+        {archive ? 'Archive' : 'Home'}
+      </button>
     </div>
   </div>
 
@@ -917,7 +945,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hint-peek:hover {
+    z-index: 4;
   }
 
   .checklist {
@@ -1054,6 +1087,16 @@
     transition: box-shadow 0.12s ease, background 0.12s ease, opacity 0.12s ease;
   }
 
+  .tile:hover {
+    z-index: 3;
+  }
+
+  .board.swiping :global(.tip-bubble),
+  .board.swiping .fill-tip {
+    opacity: 0 !important;
+    visibility: hidden !important;
+  }
+
   .tile.empty-fill,
   .tile.filled-fill {
     cursor: pointer;
@@ -1088,10 +1131,17 @@
   .fill-wedge {
     position: absolute;
     inset: 0;
-    display: flex;
+    pointer-events: none;
   }
 
-  .fill-wedge.wedge-0 {
+  .fill-body {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    pointer-events: auto;
+  }
+
+  .fill-wedge.wedge-0 .fill-body {
     clip-path: polygon(0 0, 100% 0, 50% 50%);
     align-items: flex-start;
     justify-content: center;
@@ -1102,7 +1152,7 @@
     transform: translateY(-6%);
   }
 
-  .fill-wedge.wedge-1 {
+  .fill-wedge.wedge-1 .fill-body {
     clip-path: polygon(0 0, 50% 50%, 50% 100%, 0 100%);
     align-items: center;
     justify-content: flex-start;
@@ -1114,7 +1164,7 @@
     transform: translateX(-10%);
   }
 
-  .fill-wedge.wedge-2 {
+  .fill-wedge.wedge-2 .fill-body {
     clip-path: polygon(100% 0, 100% 100%, 50% 100%, 50% 50%);
     align-items: center;
     justify-content: flex-end;
@@ -1143,12 +1193,60 @@
     height: 100%;
   }
 
-  .fill-wedge.picked {
+  .fill-wedge.picked .fill-body {
     background: var(--gist-fill-pick);
   }
 
   .tile.has-pick .fill-wedge:not(.picked) {
     opacity: 0.42;
+  }
+
+  .fill-tip {
+    position: absolute;
+    z-index: 5;
+    background: var(--gist-ink);
+    color: var(--gist-on-ink);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: lowercase;
+    line-height: 1.2;
+    white-space: nowrap;
+    padding: 0.16rem 0.4rem;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px var(--gist-shadow);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.12s ease, visibility 0.12s ease;
+  }
+
+  .fill-wedge.wedge-0 .fill-tip {
+    top: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .fill-wedge.wedge-1 .fill-tip {
+    left: 5px;
+    top: 54%;
+  }
+
+  .fill-wedge.wedge-2 .fill-tip {
+    right: 5px;
+    top: 54%;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .fill-wedge:hover {
+      z-index: 4;
+      opacity: 1;
+    }
+
+    .fill-wedge:hover .fill-tip {
+      opacity: 1;
+      visibility: visible;
+    }
   }
 
   .fill-lines {
@@ -1158,6 +1256,7 @@
     height: 100%;
     pointer-events: none;
     overflow: visible;
+    z-index: 1;
   }
 
   .fill-lines line {
@@ -1217,22 +1316,6 @@
     border-color: var(--group-tint, var(--gist-tile-border));
     background: color-mix(in srgb, var(--group-tint, var(--gist-tile)) 18%, var(--gist-tile));
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--group-tint, transparent) 40%, var(--gist-tile));
-  }
-
-  .tile.tint-fur {
-    --group-tint: #0000cd;
-  }
-
-  .tile.tint-ant {
-    --group-tint: #add8e6;
-  }
-
-  .tile.tint-ship {
-    --group-tint: #00008b;
-  }
-
-  .tile.tint-friendship {
-    --group-tint: #5e8fb6;
   }
 
   .feedback {

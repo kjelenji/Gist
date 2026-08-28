@@ -5,17 +5,19 @@
    */
   import { iconSrc, iconLabel, iconEmoji } from '$lib/icons.js';
 
-  let { word = '', size = 48, label = false, tint = '' } = $props();
+  let { word = '', size = 48, label = false, tint = '', tip = true } = $props();
 
   const src = $derived(iconSrc(word));
   const emoji = $derived(iconEmoji(word));
   const text = $derived(iconLabel(word));
+  const showTip = $derived(tip && !!text && !label);
 </script>
 
 <span
   class="icon"
   class:has-tint={!!tint}
   class:is-emoji={!!emoji}
+  class:has-tip={showTip}
   style="--size: {size}px; --tint: {tint || 'transparent'}"
 >
   {#if emoji}
@@ -26,6 +28,9 @@
   {#if label && text}
     <span class="word">{text}</span>
   {/if}
+  {#if showTip}
+    <span class="tip-bubble">{text}</span>
+  {/if}
 </span>
 
 <style>
@@ -35,7 +40,12 @@
     align-items: center;
     justify-content: center;
     gap: 0.3rem;
+    position: relative;
     pointer-events: none;
+  }
+
+  .icon.has-tip {
+    pointer-events: auto;
   }
 
   .emoji {
@@ -79,5 +89,35 @@
     text-align: center;
     max-width: 5.5rem;
     line-height: 1.2;
+  }
+
+  .tip-bubble {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% - 6px);
+    transform: translateX(-50%);
+    background: var(--gist-ink);
+    color: var(--gist-on-ink);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: lowercase;
+    line-height: 1.2;
+    white-space: nowrap;
+    padding: 0.18rem 0.45rem;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px var(--gist-shadow);
+    z-index: 6;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.12s ease, visibility 0.12s ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .icon.has-tip:hover .tip-bubble {
+      opacity: 1;
+      visibility: visible;
+    }
   }
 </style>

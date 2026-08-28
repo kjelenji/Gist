@@ -3,6 +3,7 @@
    * Puzzle icon — PNG art or large emoji glyph.
    * Soft-clue `tint` uses a border wash so colorful icons stay visible.
    */
+  import { onDestroy } from 'svelte';
   import { iconSrc, iconLabel, iconEmoji, isLineArtIcon } from '$lib/icons.js';
 
   let { word = '', size = 48, label = false, tint = '', tip = true } = $props();
@@ -12,6 +13,60 @@
   const text = $derived(iconLabel(word));
   const showTip = $derived(tip && !!text && !label);
   const lineArt = $derived(isLineArtIcon(word));
+
+  /** Touch/pen has no hover — show the word while pressed, then briefly after a tap. */
+  let pressed = $state(false);
+  let startX = 0;
+  let startY = 0;
+  /** @type {ReturnType<typeof setTimeout> | 0} */
+  let linger = 0;
+  /** @type {((e: PointerEvent) => void) | null} */
+  let endListener = null;
+
+  function clearLinger() {
+    if (linger) {
+      clearTimeout(linger);
+      linger = 0;
+    }
+  }
+
+  function detachEnd() {
+    if (!endListener) return;
+    window.removeEventListener('pointerup', endListener);
+    window.removeEventListener('pointercancel', endListener);
+    endListener = null;
+  }
+
+  function onPointerDown(event) {
+    if (!showTip || event.pointerType === 'mouse') return;
+    clearLinger();
+    detachEnd();
+    startX = event.clientX;
+    startY = event.clientY;
+    pressed = true;
+
+    const end = (up) => {
+      detachEnd();
+      const dx = up.clientX - startX;
+      const dy = up.clientY - startY;
+      if (dx * dx + dy * dy > 100) {
+        pressed = false;
+        return;
+      }
+      linger = setTimeout(() => {
+        pressed = false;
+        linger = 0;
+      }, 900);
+    };
+    endListener = end;
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  }
+
+  onDestroy(() => {
+    clearLinger();
+    detachEnd();
+  });
 </script>
 
 <span
@@ -20,7 +75,9 @@
   class:is-emoji={!!emoji}
   class:has-tip={showTip}
   class:line-art={lineArt}
+  class:pressed
   style="--size: {size}px; --tint: {tint || 'transparent'}"
+  onpointerdown={onPointerDown}
 >
   {#if emoji}
     <span class="emoji" aria-hidden="true">{emoji}</span>
@@ -122,6 +179,12 @@
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.12s ease, visibility 0.12s ease;
+  }
+
+  .icon.has-tip.pressed .tip-bubble,
+  .icon.has-tip:active .tip-bubble {
+    opacity: 1;
+    visibility: visible;
   }
 
   @media (hover: hover) and (pointer: fine) {

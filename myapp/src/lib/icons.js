@@ -4,7 +4,7 @@
  */
 
 /** Bump when icon binaries change so production/CDN caches refresh. */
-const ICON_CACHE = 'v28';
+const ICON_CACHE = 'v43';
 
 /** Emoji glyphs keyed by normalized icon id. */
 const EMOJI_ICONS = {

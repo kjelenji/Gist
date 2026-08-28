@@ -94,6 +94,8 @@
   let activePointerId: number | null = null;
   /** Fill-in wedge under the pointer when a tap starts. */
   let fillStartOption: string | null = null;
+  /** Fill-in option currently pressed (mobile word tooltip). */
+  let heldFill = $state<{ cellId: string; option: string } | null>(null);
 
   const hintedIds = $derived(HINT_REVEAL_ORDER.slice(0, hintsUsed));
   const hintsLeft = $derived(MAX_HINTS - hintsUsed);
@@ -352,6 +354,10 @@
     activePointerId = event.pointerId;
     fillStartOption =
       isFillChoice(cellId) ? fillOptionAtPoint(cellId, event.clientX, event.clientY) : null;
+    heldFill =
+      isFillChoice(cellId) && fillStartOption
+        ? { cellId, option: fillStartOption }
+        : null;
     feedback = '';
     event.preventDefault();
 
@@ -377,7 +383,13 @@
     const id = tileIdFromPoint(event.clientX, event.clientY);
     if (!id) return;
 
-    if (id !== swipeStartId) swipeMoved = true;
+    if (id !== swipeStartId) {
+      swipeMoved = true;
+      heldFill = null;
+    } else if (isFillChoice(id) && !swipeMoved) {
+      const option = fillOptionAtPoint(id, event.clientX, event.clientY);
+      heldFill = option ? { cellId: id, option } : null;
+    }
     if (id === swipeCursorId) return;
 
     // Only step to an edge-neighbor of the current cursor (no diagonals / corner cuts)
@@ -421,6 +433,7 @@
     swipeCursorId = null;
     activePointerId = null;
     fillStartOption = null;
+    heldFill = null;
   }
 
   function onBoardPointerUp(event: PointerEvent) {
@@ -709,6 +722,7 @@
     <div
       class="board"
       class:swiping
+      class:dragging={swiping && swipeMoved}
       role="grid"
       aria-label="Puzzle board"
     >
@@ -761,6 +775,7 @@
                   class:wedge-1={i === 1}
                   class:wedge-2={i === 2}
                   class:picked={word === option}
+                  class:show-tip={heldFill?.cellId === cell.id && heldFill?.option === option}
                   data-fill-option={option}
                 >
                   <span class="fill-body">
@@ -1087,12 +1102,13 @@
     transition: box-shadow 0.12s ease, background 0.12s ease, opacity 0.12s ease;
   }
 
-  .tile:hover {
+  .tile:hover,
+  .tile:active {
     z-index: 3;
   }
 
-  .board.swiping :global(.tip-bubble),
-  .board.swiping .fill-tip {
+  .board.dragging :global(.tip-bubble),
+  .board.dragging .fill-tip {
     opacity: 0 !important;
     visibility: hidden !important;
   }
@@ -1235,6 +1251,18 @@
   .fill-wedge.wedge-2 .fill-tip {
     right: 5px;
     top: 54%;
+  }
+
+  .fill-wedge.show-tip,
+  .fill-wedge:active {
+    z-index: 4;
+    opacity: 1;
+  }
+
+  .fill-wedge.show-tip .fill-tip,
+  .fill-wedge:active .fill-tip {
+    opacity: 1;
+    visibility: visible;
   }
 
   @media (hover: hover) and (pointer: fine) {

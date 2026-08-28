@@ -227,11 +227,12 @@ const friendship = makePuzzle({
 /**
  * Puzzle 5 — leaves / daylight / temperature → fall (this week)
  *
- *   temp     [maple]   day
- *   [air]    aight     lie
- *   char     oak       birch
+ *   temp     [maple]   oak
+ *   [air]    birch     aight
+ *   char     day       lie
  *
- * Daylight lands on c2 so vacant aight unlocks maple + oak + birch.
+ * Leaves sit on b1–c1–b2; daylight on b3–c3–c2. Results land on
+ * a2 / b2 / c2 so the theme combine is the middle row.
  */
 const fall = makePuzzle({
   id: 'fall',
@@ -245,22 +246,22 @@ const fall = makePuzzle({
       options: ['maple', 'honey', 'dandelion'],
       correct: 'maple',
     },
-    { id: 'c1', type: 'fixed', word: 'day' },
+    { id: 'c1', type: 'fixed', word: 'oak' },
     {
       id: 'a2',
       type: 'fill',
       options: ['air', 'water', 'fire'],
       correct: 'air',
     },
-    { id: 'b2', type: 'fixed', word: 'aight' },
-    { id: 'c2', type: 'fixed', word: 'lie' },
+    { id: 'b2', type: 'fixed', word: 'birch' },
+    { id: 'c2', type: 'fixed', word: 'aight' },
     { id: 'a3', type: 'fixed', word: 'char' },
-    { id: 'b3', type: 'fixed', word: 'oak' },
-    { id: 'c3', type: 'fixed', word: 'birch' },
+    { id: 'b3', type: 'fixed', word: 'day' },
+    { id: 'c3', type: 'fixed', word: 'lie' },
   ],
   GROUPS: [
-    { id: 'leaves', word: 'leaves', kind: 'link', cells: ['b1', 'b3', 'c3'], resultCell: 'c3' },
-    { id: 'daylight', word: 'daylight', kind: 'rebus', cells: ['c1', 'c2', 'b2'], resultCell: 'c2' },
+    { id: 'leaves', word: 'leaves', kind: 'link', cells: ['b1', 'c1', 'b2'], resultCell: 'b2' },
+    { id: 'daylight', word: 'daylight', kind: 'rebus', cells: ['b3', 'c3', 'c2'], resultCell: 'c2' },
     { id: 'temperature', word: 'temperature', kind: 'rebus', cells: ['a1', 'a2', 'a3'], resultCell: 'a2' },
   ],
   THEME: { word: 'fall', icons: ['leaves', 'temperature', 'daylight'] },

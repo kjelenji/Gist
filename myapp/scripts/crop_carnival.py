@@ -3,7 +3,7 @@ Crop carnival puzzle icons from the Gemini reference sheet.
 """
 from collections import deque
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
 
 ASSETS = Path(
@@ -107,7 +107,445 @@ def polish_neon(img: Image.Image) -> Image.Image:
             seeds.append((y, x))
     if seeds:
         arr[flood(fringe, seeds), 3] = 0
-    return to_square(Image.fromarray(arr, "RGBA"), pad=4)
+    return stylize_neon(to_square(Image.fromarray(arr, "RGBA"), pad=4))
+
+
+def _dilate(mask: np.ndarray, size: int = 3) -> np.ndarray:
+    img = Image.fromarray((mask.astype(np.uint8) * 255), "L")
+    return np.asarray(img.filter(ImageFilter.MaxFilter(size))) > 128
+
+
+def _glow(mask: np.ndarray, color, radius: float, strength: float) -> Image.Image:
+    H, W = mask.shape
+    layer = np.zeros((H, W, 4), np.float32)
+    m = mask.astype(np.float32)
+    layer[:, :, 0] = color[0] * m
+    layer[:, :, 1] = color[1] * m
+    layer[:, :, 2] = color[2] * m
+    layer[:, :, 3] = 255.0 * m * strength
+    im = Image.fromarray(np.clip(layer, 0, 255).astype(np.uint8), "RGBA")
+    return im.filter(ImageFilter.GaussianBlur(radius=radius))
+
+
+def _screen_onto(base: np.ndarray, glow: Image.Image, amount: float = 1.0) -> None:
+    """Light the opaque plate with a neon bloom (glow otherwise sits underneath)."""
+    g = np.asarray(glow).astype(np.float32)
+    ga = (g[:, :, 3:4] / 255.0) * amount
+    screened = 255.0 - (255.0 - base[:, :, :3]) * (255.0 - g[:, :, :3]) / 255.0
+    base[:, :, :3] = np.clip(base[:, :, :3] * (1.0 - ga) + screened * ga, 0, 255)
+
+
+def _scale_mask(mask: np.ndarray, scale_x: float, scale_y: float | None = None) -> np.ndarray:
+    if scale_y is None:
+        scale_y = scale_x
+    ys, xs = np.where(mask)
+    if len(xs) == 0:
+        return np.zeros((1, 1), dtype=bool)
+    y0, x0 = int(ys.min()), int(xs.min())
+    crop = mask[y0 : int(ys.max()) + 1, x0 : int(xs.max()) + 1]
+    im = Image.fromarray((crop.astype(np.uint8) * 255), "L")
+    nw = max(1, round(crop.shape[1] * scale_x))
+    nh = max(1, round(crop.shape[0] * scale_y))
+    return np.asarray(im.resize((nw, nh), Image.Resampling.LANCZOS)) > 128
+
+
+def _fit_masks(fill: np.ndarray, outline: np.ndarray, max_h: int, max_w: int):
+    """Uniformly shrink digit masks so they fit in the plate band above/below Ne."""
+    h, w = fill.shape
+    if h <= 0 or w <= 0:
+        return fill, outline
+    scale = min(max_h / h, max_w / w, 1.0)
+    if scale >= 0.999:
+        return fill, outline
+
+    def _sm(m: np.ndarray) -> np.ndarray:
+        nh = max(1, round(m.shape[0] * scale))
+        nw = max(1, round(m.shape[1] * scale))
+        im = Image.fromarray((m.astype(np.uint8) * 255), "L")
+        return np.asarray(im.resize((nw, nh), Image.Resampling.LANCZOS)) > 128
+
+    return _sm(fill), _sm(outline)
+
+
+def _in_round_rect(y, x, y0, x0, y1, x1, rad: float) -> bool:
+    if y < y0 or y >= y1 or x < x0 or x >= x1:
+        return False
+    hh = y1 - y0
+    ww = x1 - x0
+    rad = max(0, min(int(rad), hh // 2, ww // 2))
+    ly = y - y0
+    lx = x - x0
+    if rad <= 0:
+        return True
+    if rad <= ly < hh - rad or rad <= lx < ww - rad:
+        return True
+    cy = rad - 0.5 if ly < rad else hh - rad - 0.5
+    cx = rad - 0.5 if lx < rad else ww - rad - 0.5
+    return (ly - cy) ** 2 + (lx - cx) ** 2 <= (rad + 0.02) ** 2
+
+
+def _make_zero(h: int, w: int) -> np.ndarray:
+    """Symmetric rounded-rect 0 with a clean centered counter."""
+    g = np.zeros((h, w), dtype=bool)
+    if h < 5 or w < 5:
+        g[:, :] = True
+        return g
+    t = max(2, round(min(h, w) * 0.24))
+    rad = max(2, min(h, w) // 3)
+    inner_rad = max(1, rad - 1)
+    for y in range(h):
+        for x in range(w):
+            outer = _in_round_rect(y, x, 0, 0, h, w, rad)
+            inner = _in_round_rect(y, x, t, t, h - t, w - t, inner_rad)
+            g[y, x] = outer and not inner
+    return g
+
+
+def _polish_last_zero(fill: np.ndarray) -> np.ndarray:
+    """Redraw the rightmost bottom 0 at the current pixel size so it stays even."""
+    H, W = fill.shape
+    labels, n = _label(fill)
+    best = None
+    best_x = -1
+    for i in range(1, n + 1):
+        comp = labels == i
+        ys, xs = np.where(comp)
+        if int(ys.min()) < H * 0.45:
+            continue
+        if _has_hole(comp) and int(xs.max()) > best_x:
+            best_x = int(xs.max())
+            best = i
+    if best is None:
+        return fill
+    comp = labels == best
+    y0, y1, x0, x1 = _bbox(comp)
+    out = fill.copy()
+    out[comp] = False
+    out[y0:y1, x0:x1] |= _make_zero(y1 - y0, x1 - x0)
+    return out
+
+
+def _assemble_digits(parts, scale_x: float, scale_y: float | None = None, polish_last_zero: bool = False):
+    """Scale each digit, leave a gap, and stroke only the outside (holes stay open).
+
+    Short blobs (the decimal) keep a square scale and sit on the baseline so they
+    don't stretch into a vertically centered block.
+    """
+    if scale_y is None:
+        scale_y = scale_x
+    raw = []
+    for part in sorted(parts, key=lambda p: int(np.where(p)[1].min())):
+        ys = np.where(part)[0]
+        raw.append((part, int(ys.max()) - int(ys.min()) + 1))
+    max_h = max((h for _, h in raw), default=1)
+
+    glyphs = []
+    is_dot = []
+    for part, h in raw:
+        short = h <= max_h * 0.5
+        g = _scale_mask(part, scale_x, scale_x if short else scale_y)
+        if not g.any():
+            continue
+        glyphs.append(g)
+        is_dot.append(short)
+    if not glyphs:
+        z = np.zeros((1, 1), dtype=bool)
+        return z, z
+
+    H = max(g.shape[0] for g in glyphs)
+    # Keep the period a small square on the baseline (~1/5 cap height).
+    target = max(4, round(H * 0.20))
+    sized = []
+    for g, short in zip(glyphs, is_dot):
+        if short and g.shape[0] > target:
+            im = Image.fromarray((g.astype(np.uint8) * 255), "L")
+            ratio = target / g.shape[0]
+            nw = max(3, round(g.shape[1] * ratio))
+            g = np.asarray(im.resize((nw, target), Image.Resampling.NEAREST)) > 90
+        sized.append(g)
+    glyphs = sized
+
+    last_zero = None
+    if polish_last_zero:
+        for i in range(len(glyphs) - 1, -1, -1):
+            if not is_dot[i]:
+                last_zero = i
+                break
+
+    def _median(g):
+        if g.shape[0] < 3 or g.shape[1] < 3:
+            return g
+        return np.asarray(
+            Image.fromarray((g.astype(np.uint8) * 255), "L").filter(ImageFilter.MedianFilter(3))
+        ) > 128
+
+    cleaned = []
+    for i, g in enumerate(glyphs):
+        if i == last_zero:
+            gh, gw = g.shape
+            cleaned.append(_make_zero(gh, gw))
+        else:
+            cleaned.append(_median(g))
+    glyphs = cleaned
+
+    gap = 3
+    widths = [g.shape[1] for g in glyphs]
+    H = max(g.shape[0] for g in glyphs)
+    W = int(sum(widths) + gap * (len(glyphs) - 1))
+    fill = np.zeros((H, W), dtype=bool)
+    x = 0
+    for g in glyphs:
+        gy = H - g.shape[0]
+        fill[gy : gy + g.shape[0], x : x + g.shape[1]] |= g
+        x += g.shape[1] + gap
+    outline = _dilate(fill, 3) & ~fill
+    return fill, outline
+
+
+def _paste_bool(dst: np.ndarray, src: np.ndarray, top: int, left: int) -> None:
+    h, w = src.shape
+    H, W = dst.shape
+    y0, x0 = max(0, top), max(0, left)
+    y1, x1 = min(H, top + h), min(W, left + w)
+    if y1 <= y0 or x1 <= x0:
+        return
+    dst[y0:y1, x0:x1] |= src[y0 - top : y0 - top + (y1 - y0), x0 - left : x0 - left + (x1 - x0)]
+
+
+def _label(mask: np.ndarray):
+    H, W = mask.shape
+    labels = np.zeros(mask.shape, np.int32)
+    n = 0
+
+    for y, x in zip(*np.where(mask)):
+        if labels[y, x]:
+            continue
+        n += 1
+        q = deque([(y, x)])
+        labels[y, x] = n
+        while q:
+            cy, cx = q.popleft()
+            for ny in range(cy - 1, cy + 2):
+                for nx in range(cx - 1, cx + 2):
+                    if 0 <= ny < H and 0 <= nx < W and mask[ny, nx] and labels[ny, nx] == 0:
+                        labels[ny, nx] = n
+                        q.append((ny, nx))
+    return labels, n
+
+
+def _digit_parts(mask: np.ndarray, max_w: int = 12):
+    """Connected components, split wide blobs (e.g. touching 8 and 0)."""
+    labels, n = _label(mask)
+    parts = []
+    for i in range(1, n + 1):
+        comp = labels == i
+        ys, xs = np.where(comp)
+        x0, x1 = int(xs.min()), int(xs.max()) + 1
+        if x1 - x0 <= max_w:
+            parts.append(comp)
+            continue
+        col = comp[:, x0:x1].sum(axis=0)
+        interior = col[2:-2]
+        if len(interior) == 0:
+            parts.append(comp)
+            continue
+        split_x = x0 + int(np.argmin(interior)) + 2
+        left = comp.copy()
+        left[:, split_x:] = False
+        right = comp.copy()
+        right[:, :split_x] = False
+        for side in (left, right):
+            if not side.any():
+                continue
+            sxs = np.where(side)[1]
+            if int(sxs.max()) - int(sxs.min()) + 1 > max_w:
+                parts.extend(_digit_parts(side, max_w))
+            else:
+                parts.append(side)
+    return _merge_hole_halves(parts)
+
+
+def _bbox(mask: np.ndarray):
+    ys, xs = np.where(mask)
+    return int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1
+
+
+def _has_hole(mask: np.ndarray) -> bool:
+    """True if the glyph has an enclosed counter (0, 8, 4, ...)."""
+    if not mask.any():
+        return False
+    y0, y1, x0, x1 = _bbox(mask)
+    pad = np.pad(mask[y0:y1, x0:x1], 1, constant_values=False)
+    vis = np.zeros(pad.shape, dtype=bool)
+    q = deque()
+    ph, pw = pad.shape
+    for y, x in ((0, 0), (0, pw - 1), (ph - 1, 0), (ph - 1, pw - 1)):
+        if not pad[y, x] and not vis[y, x]:
+            vis[y, x] = True
+            q.append((y, x))
+    while q:
+        cy, cx = q.popleft()
+        for ny in range(max(0, cy - 1), min(ph, cy + 2)):
+            for nx in range(max(0, cx - 1), min(pw, cx + 2)):
+                if not pad[ny, nx] and not vis[ny, nx]:
+                    vis[ny, nx] = True
+                    q.append((ny, nx))
+    return bool((~pad & ~vis).any())
+
+
+def _merge_hole_halves(parts):
+    """Rejoin 0/8 halves that the hole split into two components."""
+    ordered = sorted(parts, key=lambda p: int(np.where(p)[1].min()))
+    merged = []
+    i = 0
+    while i < len(ordered):
+        if i + 1 < len(ordered):
+            a, b = ordered[i], ordered[i + 1]
+            ya0, ya1, xa0, xa1 = _bbox(a)
+            yb0, yb1, xb0, xb1 = _bbox(b)
+            y_overlap = min(ya1, yb1) - max(ya0, yb0)
+            min_h = min(ya1 - ya0, yb1 - yb0)
+            gap = xb0 - xa1
+            comb = a | b
+            if (
+                min_h > 0
+                and y_overlap > 0.6 * min_h
+                and gap <= 2
+                and not _has_hole(a)
+                and not _has_hole(b)
+                and _has_hole(comb)
+            ):
+                merged.append(comb)
+                i += 2
+                continue
+        merged.append(ordered[i])
+        i += 1
+    return merged
+
+
+def stylize_neon(img: Image.Image) -> Image.Image:
+    """Bigger glowing-white 10 / 20.180 with a thin outer black outline."""
+    arr = np.asarray(img.convert("RGBA")).astype(np.float32)
+    H, W = arr.shape[:2]
+    r, g, b, a = [arr[:, :, i] for i in range(4)]
+    op = a > 20
+
+    gold = op & (r > 155) & (g > 95) & (b < 140) & (r > g) & (g > b + 15)
+    cover = _dilate(gold, 5)
+    pink = op & (r > 190) & (g > 125) & (b > 150) & ~cover
+    out = arr.copy()
+    if pink.any():
+        plate = np.median(out[pink], axis=0)
+        out[cover] = plate
+
+    fill = np.zeros((H, W), dtype=bool)
+    outline = np.zeros((H, W), dtype=bool)
+    ys_op = np.where(op.any(axis=1))[0]
+    inner_top, inner_bot = int(ys_op[0]) + 8, int(ys_op[-1]) - 8
+
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    ne = pink & (lum > (float(np.median(lum[pink])) + 20 if pink.any() else 200))
+    if ne.any():
+        ne_ys = np.where(ne.any(axis=1))[0]
+        ne_top, ne_bot = int(ne_ys[0]), int(ne_ys[-1])
+    else:
+        ne_top, ne_bot = H // 2 - 24, H // 2 + 24
+    gap = 8
+    xs_op = np.where(op.any(axis=0))[0]
+    plate_w = int(xs_op[-1] - xs_op[0]) - 24
+
+    for band, sx, sy, edge in (
+        (gold.copy(), 1.35, 1.4, "top"),
+        (gold.copy(), 1.85, 2.0, "bottom"),
+    ):
+        if edge == "top":
+            band[H // 2 :, :] = False
+            max_h = max(8, (ne_top - gap) - (inner_top + 1))
+        else:
+            band[: H // 2, :] = False
+            max_h = max(8, (inner_bot - 1) - (ne_bot + gap))
+        if not band.any():
+            continue
+        f, o = _assemble_digits(_digit_parts(band), sx, sy, polish_last_zero=(edge == "bottom"))
+        f, o = _fit_masks(f, o, max_h, max(16, plate_w))
+        fh, fw = f.shape
+        left = (W - fw) // 2
+        top = inner_top + 1 if edge == "top" else inner_bot - fh - 1
+        _paste_bool(fill, f, top, left)
+        _paste_bool(outline, o, top, left)
+    outline &= ~fill
+
+    glows = [
+        _glow(fill, (255, 255, 255), 6, 0.7),
+        _glow(fill, (255, 255, 255), 3, 0.8),
+    ]
+    for gl in glows:
+        _screen_onto(out, gl, amount=0.85)
+        g = np.asarray(gl).astype(np.float32)
+        ga = g[:, :, 3:4] / 255.0
+        out[:, :, :3] = np.clip(out[:, :, :3] + g[:, :, :3] * ga * 0.25, 0, 255)
+
+    base = Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
+    canvas = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    for gl in glows:
+        canvas = Image.alpha_composite(canvas, gl)
+    plate = Image.alpha_composite(canvas, base)
+    return _stamp_numbers(enlarge_neon(plate), fill, outline, plate)
+
+
+def _stamp_numbers(enlarged: Image.Image, fill: np.ndarray, outline: np.ndarray, plate: Image.Image) -> Image.Image:
+    """Scale number masks with nearest-neighbor and stamp after the plate is enlarged."""
+    x0, y0, x1, y1, nw, nh, px, py, W, H = _tile_scale(plate)
+    fill_s = _scale_bool(fill[y0:y1, x0:x1], nw, nh)
+    out = np.zeros((H, W), dtype=bool)
+    out[py : py + nh, px : px + nw] = fill_s
+    out = _polish_last_zero(out)
+    ring = _dilate(out, 3) & ~out
+    arr = np.asarray(enlarged.convert("RGBA")).copy()
+    arr[ring, 0] = 0
+    arr[ring, 1] = 0
+    arr[ring, 2] = 0
+    arr[ring, 3] = 255
+    arr[out, 0] = 255
+    arr[out, 1] = 255
+    arr[out, 2] = 255
+    arr[out, 3] = 255
+    return Image.fromarray(arr, "RGBA")
+
+
+def _scale_bool(mask: np.ndarray, nw: int, nh: int) -> np.ndarray:
+    if mask.size == 0:
+        return np.zeros((nh, nw), dtype=bool)
+    im = Image.fromarray((mask.astype(np.uint8) * 255), "L")
+    return np.asarray(im.resize((nw, nh), Image.Resampling.NEAREST)) > 128
+
+
+def _tile_scale(img: Image.Image, scale: float = 1.48):
+    arr = np.asarray(img.convert("RGBA"))
+    ys, xs = np.where(arr[:, :, 3] > 8)
+    if len(xs) == 0:
+        W, H = img.size
+        return 0, 0, W, H, W, H, 0, 0, W, H
+    x0, y0 = int(xs.min()), int(ys.min())
+    x1, y1 = int(xs.max()) + 1, int(ys.max()) + 1
+    nw = max(1, round((x1 - x0) * scale))
+    nh = max(1, round((y1 - y0) * scale))
+    W, H = img.size
+    fit = min((W - 6) / nw, (H - 6) / nh, 1.0)
+    if fit < 1:
+        nw, nh = max(1, int(nw * fit)), max(1, int(nh * fit))
+    px, py = (W - nw) // 2, (H - nh) // 2
+    return x0, y0, x1, y1, nw, nh, px, py, W, H
+
+
+def enlarge_neon(img: Image.Image, scale: float = 1.48) -> Image.Image:
+    """Fill more of the square so the tile reads larger on the board."""
+    x0, y0, x1, y1, nw, nh, px, py, W, H = _tile_scale(img, scale)
+    tile = img.crop((x0, y0, x1, y1))
+    scaled = tile.resize((nw, nh), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    canvas.paste(scaled, (px, py), scaled)
+    return canvas
 
 
 def polish_xray(img: Image.Image) -> Image.Image:
@@ -153,12 +591,13 @@ def polish_xray(img: Image.Image) -> Image.Image:
 
 
 def polish_existing():
-    for name, fn in (("neon", polish_neon), ("x-ray", polish_xray)):
-        path = OUT / f"{name}.png"
-        src = Image.open(path)
-        out = fn(src)
-        out.save(path)
-        print("polished", name, src.size, "->", out.size)
+    neon_src = DBG / "neon_src.png"
+    if not neon_src.exists():
+        Image.open(OUT / "neon.png").save(neon_src)
+    src = Image.open(neon_src)
+    out = stylize_neon(src)
+    out.save(OUT / "neon.png")
+    print("polished neon", src.size, "->", out.size)
 
 
 def split(img, rows, cols, inset=0.1):

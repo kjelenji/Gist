@@ -1,6 +1,7 @@
 """
 Crop carnival puzzle icons from the Gemini reference sheet.
 """
+from collections import deque
 from pathlib import Path
 from PIL import Image
 import numpy as np
@@ -47,8 +48,117 @@ def save_icon(img: Image.Image, name: str, keep_bg: bool = False):
     side = max(out.width, out.height, 64)
     canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
     canvas.paste(out, ((side - out.width) // 2, (side - out.height) // 2))
+    if name == "neon":
+        canvas = polish_neon(canvas)
+    elif name == "x-ray":
+        canvas = polish_xray(canvas)
     canvas.save(OUT / f"{name}.png")
     print("saved", name, canvas.size)
+
+
+def flood(mask, seeds):
+    H, W = mask.shape
+    visited = np.zeros((H, W), dtype=bool)
+    q = deque()
+    for y, x in seeds:
+        if 0 <= y < H and 0 <= x < W and mask[y, x] and not visited[y, x]:
+            visited[y, x] = True
+            q.append((y, x))
+    while q:
+        y, x = q.popleft()
+        for ny, nx in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+            if 0 <= ny < H and 0 <= nx < W and mask[ny, nx] and not visited[ny, nx]:
+                visited[ny, nx] = True
+                q.append((ny, nx))
+    return visited
+
+
+def to_square(img, pad=2):
+    bbox = img.getbbox()
+    if not bbox:
+        return img
+    x0, y0, x1, y1 = bbox
+    x0, y0 = max(0, x0 - pad), max(0, y0 - pad)
+    x1, y1 = min(img.width, x1 + pad), min(img.height, y1 + pad)
+    cropped = img.crop((x0, y0, x1, y1))
+    side = max(cropped.width, cropped.height, 64)
+    canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    canvas.paste(cropped, ((side - cropped.width) // 2, (side - cropped.height) // 2), cropped)
+    return canvas
+
+
+def polish_neon(img: Image.Image) -> Image.Image:
+    """Drop the gray anti-aliased ring left after knocking out the plate."""
+    arr = np.asarray(img.convert("RGBA")).copy()
+    H, W = arr.shape[:2]
+    r = arr[:, :, 0].astype(np.int16)
+    g = arr[:, :, 1].astype(np.int16)
+    b = arr[:, :, 2].astype(np.int16)
+    a = arr[:, :, 3]
+    sat = np.maximum(np.maximum(r, g), b) - np.minimum(np.minimum(r, g), b)
+    fringe = (a > 0) & (sat < 24)
+    trans = a == 0
+    seeds = []
+    ys, xs = np.where(fringe)
+    for y, x in zip(ys.tolist(), xs.tolist()):
+        y0, y1 = max(0, y - 1), min(H, y + 2)
+        x0, x1 = max(0, x - 1), min(W, x + 2)
+        if trans[y0:y1, x0:x1].any() or y in (0, H - 1) or x in (0, W - 1):
+            seeds.append((y, x))
+    if seeds:
+        arr[flood(fringe, seeds), 3] = 0
+    return to_square(Image.fromarray(arr, "RGBA"), pad=4)
+
+
+def polish_xray(img: Image.Image) -> Image.Image:
+    """Crop to the black film; leave the white/gray bezel behind."""
+    arr = np.asarray(img.convert("RGBA")).copy()
+    H, W = arr.shape[:2]
+    r = arr[:, :, 0].astype(np.float32)
+    g = arr[:, :, 1].astype(np.float32)
+    b = arr[:, :, 2].astype(np.float32)
+    a = arr[:, :, 3]
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    opaque = a > 10
+    dark = opaque & (lum < 90)
+    if not dark.any():
+        return img
+
+    # Already cropped: leftover bright pixels are bone, not a film bezel.
+    border = np.zeros((H, W), dtype=bool)
+    border[:3, :] = True
+    border[-3:, :] = True
+    border[:, :3] = True
+    border[:, -3:] = True
+    edge_op = opaque & border
+    if edge_op.any() and (lum[edge_op] > 180).mean() < 0.08:
+        return to_square(img, pad=2)
+
+    col_dark = dark.mean(axis=0)
+    row_dark = dark.mean(axis=1)
+    xs = np.where(col_dark > 0.12)[0]
+    ys = np.where(row_dark > 0.12)[0]
+    if len(xs) < 8 or len(ys) < 8:
+        return img
+
+    x0, x1 = int(xs[0]), int(xs[-1]) + 1
+    y0, y1 = int(ys[0]), int(ys[-1]) + 1
+    inset = 8
+    x0, y0 = x0 + inset, y0 + inset
+    x1, y1 = x1 - inset, y1 - inset
+    if x1 - x0 < 32 or y1 - y0 < 32:
+        return img
+    cropped = Image.fromarray(arr, "RGBA").crop((x0, y0, x1, y1))
+    return to_square(cropped, pad=2)
+
+
+def polish_existing():
+    for name, fn in (("neon", polish_neon), ("x-ray", polish_xray)):
+        path = OUT / f"{name}.png"
+        src = Image.open(path)
+        out = fn(src)
+        out.save(path)
+        print("polished", name, src.size, "->", out.size)
 
 
 def split(img, rows, cols, inset=0.1):
@@ -194,4 +304,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    polish_existing()

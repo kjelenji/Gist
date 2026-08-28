@@ -8,9 +8,9 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Icon from '$lib/components/Icon.svelte';
-  import { loadResult, saveResult, formatTime } from '$lib/resultStore.js';
+  import { loadWeekResult, loadArchiveResult, saveResult, formatTime } from '$lib/resultStore.js';
   import { answerKey } from '$lib/puzzleBoard.js';
-  import { getPuzzle, getCurrentPuzzle, PUZZLES } from '$lib/puzzles.js';
+  import { getPuzzle, getCurrentPuzzle, PUZZLES, CURRENT_PUZZLE_ID } from '$lib/puzzles.js';
   import {
     getUsername,
     setUsername,
@@ -43,8 +43,13 @@
   let collectibles = $state<{ number: string; word: string }[]>([]);
 
   const requestedId = $derived(page.url.searchParams.get('id'));
+  const archiveId = $derived(
+    requestedId && requestedId !== CURRENT_PUZZLE_ID ? requestedId : null
+  );
   const resultPuzzle = $derived(
-    getPuzzle(result?.puzzleId) || getPuzzle(requestedId) || getCurrentPuzzle()
+    archiveId
+      ? getPuzzle(archiveId) || getCurrentPuzzle()
+      : getCurrentPuzzle()
   );
 
   function catalogCollectible(number: string | undefined) {
@@ -59,47 +64,65 @@
   function normalizeResult(raw: typeof result, puzzle = resultPuzzle) {
     if (!raw) return null;
     const catalog = raw.won
-      ? (getPuzzle(raw.puzzleId)?.COLLECTIBLE ?? puzzle.COLLECTIBLE)
+      ? (puzzle.COLLECTIBLE ?? raw.collectible ?? null)
       : (raw.collectible ?? null);
-    return { ...raw, answers: defaultAnswers(puzzle), collectible: catalog };
+    return {
+      ...raw,
+      puzzleId: puzzle.id,
+      archive: puzzle.id !== CURRENT_PUZZLE_ID,
+      answers: defaultAnswers(puzzle),
+      collectible: catalog,
+    };
+  }
+
+  function playedThisWeekPlaceholder(current = getCurrentPuzzle()) {
+    return {
+      won: true,
+      elapsedSeconds: 0,
+      points: 0,
+      username: getUsername() || '',
+      puzzleId: current.id,
+      archive: false,
+      scoreSaved: false,
+      answers: defaultAnswers(current),
+      collectible: current.COLLECTIBLE,
+    };
   }
 
   onMount(() => {
-    const stored = loadResult();
-    const urlPuzzle = getPuzzle(requestedId);
-    const storedPuzzle = getPuzzle(stored?.puzzleId);
+    const current = getCurrentPuzzle();
 
-    if (urlPuzzle && stored?.puzzleId === urlPuzzle.id) {
-      result = normalizeResult(stored, urlPuzzle);
-    } else if (urlPuzzle && hasPlayedArchive(urlPuzzle.id)) {
-      result = {
-        won: true,
-        elapsedSeconds: stored?.puzzleId === urlPuzzle.id ? stored.elapsedSeconds : 0,
-        points: stored?.puzzleId === urlPuzzle.id ? stored.points : 0,
-        username: getUsername() || '',
-        puzzleId: urlPuzzle.id,
-        archive: true,
-        scoreSaved: true,
-        answers: defaultAnswers(urlPuzzle),
-        collectible: urlPuzzle.COLLECTIBLE,
-      };
-    } else if (!requestedId) {
-      result = normalizeResult(stored, storedPuzzle || getCurrentPuzzle());
-      if (!result && hasPlayedThisWeek()) {
-        const current = getCurrentPuzzle();
+    if (archiveId) {
+      const urlPuzzle = getPuzzle(archiveId);
+      const stored = loadArchiveResult(archiveId);
+      if (urlPuzzle && stored?.puzzleId === urlPuzzle.id) {
+        result = normalizeResult(stored, urlPuzzle);
+      } else if (urlPuzzle && hasPlayedArchive(urlPuzzle.id)) {
         result = {
           won: true,
-          elapsedSeconds: 0,
-          points: 0,
+          elapsedSeconds: stored?.puzzleId === urlPuzzle.id ? stored.elapsedSeconds : 0,
+          points: stored?.puzzleId === urlPuzzle.id ? stored.points : 0,
           username: getUsername() || '',
-          puzzleId: current.id,
-          scoreSaved: false,
-          answers: defaultAnswers(current),
-          collectible: current.COLLECTIBLE,
+          puzzleId: urlPuzzle.id,
+          archive: true,
+          scoreSaved: true,
+          answers: defaultAnswers(urlPuzzle),
+          collectible: urlPuzzle.COLLECTIBLE,
         };
+      } else {
+        result = null;
       }
     } else {
-      result = null;
+      const stored = loadWeekResult();
+      const matchesWeek =
+        stored && !stored.archive && (!stored.puzzleId || stored.puzzleId === current.id);
+      if (matchesWeek) {
+        result = normalizeResult(stored, current);
+      } else if (hasPlayedThisWeek()) {
+        result = playedThisWeekPlaceholder(current);
+      } else {
+        result = null;
+      }
     }
 
     if (result) saveResult(result);
@@ -110,7 +133,7 @@
     // Puzzle page may finish the scoreboard POST after navigation.
     const poll = setInterval(() => {
       if (result?.archive) return;
-      const latest = normalizeResult(loadResult(), storedPuzzle || getCurrentPuzzle());
+      const latest = normalizeResult(loadWeekResult(), current);
       if (!latest) return;
       if (latest.scoreSaved && !scoreSaved) {
         scoreSaved = true;

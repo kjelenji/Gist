@@ -3,7 +3,7 @@
    * Puzzle icon — PNG art or large emoji glyph.
    * Soft-clue `tint` uses a border wash so colorful icons stay visible.
    */
-  import { iconSrc, iconLabel, iconEmoji } from '$lib/icons.js';
+  import { iconSrc, iconLabel, iconEmoji, isLineArtIcon } from '$lib/icons.js';
 
   let { word = '', size = 48, label = false, tint = '', tip = true } = $props();
 
@@ -11,6 +11,7 @@
   const emoji = $derived(iconEmoji(word));
   const text = $derived(iconLabel(word));
   const showTip = $derived(tip && !!text && !label);
+  const lineArt = $derived(isLineArtIcon(word));
 </script>
 
 <span
@@ -18,6 +19,7 @@
   class:has-tint={!!tint}
   class:is-emoji={!!emoji}
   class:has-tip={showTip}
+  class:line-art={lineArt}
   style="--size: {size}px; --tint: {tint || 'transparent'}"
 >
   {#if emoji}
@@ -71,6 +73,14 @@
     flex-shrink: 0;
     user-select: none;
     -webkit-user-drag: none;
+  }
+
+  :global(html[data-theme='dark']) .icon.line-art .art {
+    filter:
+      invert(1)
+      contrast(1.12)
+      drop-shadow(0 0 0.55px #fff)
+      drop-shadow(0 0 1.6px rgba(232, 238, 243, 0.65));
   }
 
   .icon.has-tint .art,

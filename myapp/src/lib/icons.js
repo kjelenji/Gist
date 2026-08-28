@@ -4,7 +4,7 @@
  */
 
 /** Bump when icon binaries change so production/CDN caches refresh. */
-const ICON_CACHE = 'v23';
+const ICON_CACHE = 'v28';
 
 /** Emoji glyphs keyed by normalized icon id. */
 const EMOJI_ICONS = {
@@ -30,7 +30,7 @@ const EMOJI_ICONS = {
   lie: '🤥',
   leaves: '🍃',
   daylight: '🌞',
-  temperature: '🥵',
+  temperature: '🌡️',
   fall: '🍂',
 };
 
@@ -41,9 +41,34 @@ const FILE_ALIASES = {
   'queen-ant': 'queen',
 };
 
+/** Puzzle 1 line-art — dark ink, needs invert in dark mode. */
+const LINE_ART_KEYS = new Set([
+  'owl',
+  'mitt',
+  'algae',
+  'awl',
+  'jay',
+  'hand',
+  'himantes1',
+  'himantes2',
+  'athena',
+  'hera',
+  'aphrodite',
+  'helmet',
+  'mittens',
+  'wisdom',
+  'eye',
+  'eye-chart',
+]);
+
 /** @param {string} word */
 function iconKey(word) {
   return (word || '').toLowerCase().trim().replace(/\s+/g, '-');
+}
+
+/** @param {string} word */
+export function isLineArtIcon(word) {
+  return LINE_ART_KEYS.has(iconKey(word));
 }
 
 /** @param {string} word */
@@ -67,6 +92,7 @@ export function iconLabel(word) {
   if (key === 'owl-home') return 'owl home';
   if (key === 'queen' || key === 'queen-ant') return 'queen ant';
   if (key === 'himantes1' || key === 'himantes2') return 'himantes';
+  if (key === 'mittens') return 'gloves';
   if (key === 'ferris-wheel') return 'ferris wheel';
   if (key === 'rolled-cash') return 'rolled cash';
   if (key === 'rolls-royce') return 'rolls-royce';

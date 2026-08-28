@@ -100,6 +100,31 @@ def clear_she_halo(img: Image.Image) -> Image.Image:
     return Image.fromarray(arr, "RGBA")
 
 
+def clear_bracelet_hole(img, thr=242):
+    """Knock out the enclosed white oval inside the friendship bracelet."""
+    arr = np.asarray(img.convert("RGBA")).copy()
+    H, W = arr.shape[:2]
+    r, g, b, a = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2], arr[:, :, 3]
+    hole = (a > 10) & (r >= thr) & (g >= thr) & (b >= thr)
+    cy, cx = H // 2, W // 2
+    visited = np.zeros((H, W), dtype=bool)
+    q = deque()
+    for dy in range(-8, 9):
+        for dx in range(-8, 9):
+            y, x = cy + dy, cx + dx
+            if 0 <= y < H and 0 <= x < W and hole[y, x] and not visited[y, x]:
+                visited[y, x] = True
+                q.append((y, x))
+    while q:
+        y, x = q.popleft()
+        arr[y, x, 3] = 0
+        for ny, nx in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+            if 0 <= ny < H and 0 <= nx < W and not visited[ny, nx] and hole[ny, nx]:
+                visited[ny, nx] = True
+                q.append((ny, nx))
+    return Image.fromarray(arr, "RGBA")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for src_name, out_name in FILES.items():
@@ -110,6 +135,8 @@ def main():
         out = flood_clear_white(Image.open(src))
         if out_name == "she.png":
             out = clear_she_halo(out)
+        if out_name == "friendship.png":
+            out = clear_bracelet_hole(out)
         out = trim_square(out)
         out.thumbnail((256, 256), Image.Resampling.LANCZOS)
         out.save(OUT / out_name)

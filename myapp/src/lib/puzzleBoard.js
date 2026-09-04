@@ -3,7 +3,16 @@
  * Board data lives in puzzles.js; pass a puzzle into these functions.
  */
 
-import { getCurrentPuzzle } from './puzzles.js';
+import { cellsOrthogonallyConnected } from './boardGeometry.js';
+
+export {
+  CELL_IDS,
+  cellCoords,
+  isOrthogonalNeighbors,
+  canReachOrthogonally,
+  isOrthogonalSelection,
+  cellsOrthogonallyConnected,
+} from './boardGeometry.js';
 
 /** @typedef {import('./puzzles.js').Puzzle} Puzzle */
 /** @typedef {import('./puzzles.js').Group} Group */
@@ -74,8 +83,12 @@ export function isSequenceStillValid(puzzle, solvedOrder) {
  * @param {string[]} solvedGroupIds
  * @param {Record<string, string>} fillAnswers
  * @param {Record<string, string | null>} [boardWords]
+ * @param {string[]} [vacantIds] empty tiles the swipe may path through
  */
-export function matchGroup(puzzle, selectedIds, solvedGroupIds, fillAnswers, boardWords) {
+export function matchGroup(puzzle, selectedIds, solvedGroupIds, fillAnswers, boardWords, vacantIds = []) {
+  const boardIds = puzzle.BOARD.map((c) => c.id);
+  if (!cellsOrthogonallyConnected(selectedIds, boardIds, vacantIds)) return null;
+
   for (const group of puzzle.GROUPS) {
     if (solvedGroupIds.includes(group.id)) continue;
     if (!sameCellSet(selectedIds, group.cells)) continue;
@@ -174,23 +187,3 @@ export function answerKey(puzzle) {
     },
   ];
 }
-
-/**
- * Bound helpers for the current weekly puzzle.
- * Prefer passing an explicit puzzle into the functions above.
- */
-const current = getCurrentPuzzle();
-export const BOARD = current.BOARD;
-export const GROUPS = current.GROUPS;
-export const THEME = current.THEME;
-export const THEME_GROUP = current.THEME_GROUP;
-export const COLLECTIBLE = current.COLLECTIBLE;
-export const HINT_REVEAL_ORDER = current.HINT_REVEAL_ORDER;
-export const GROUP_COLORS = current.GROUP_COLORS;
-export const COMBINE_SIZE = current.COMBINE_SIZE;
-export const MAX_HINTS = current.MAX_HINTS;
-export const MAX_LIVES = current.MAX_LIVES;
-export const TOTAL_MOVES = current.TOTAL_MOVES;
-export const FILL_CELL_IDS = fillCellIds(current);
-export const LINK_GROUP_IDS = linkGroupIds(current);
-export const REBUS_GROUP_IDS = rebusGroupIds(current);

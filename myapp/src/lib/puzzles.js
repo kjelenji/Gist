@@ -1,280 +1,142 @@
 /**
- * All Gist puzzles. The live weekly board is CURRENT_PUZZLE_ID;
- * everything else is playable from /archive in the pop-on-board format.
+ * All Gist puzzles. Switch the live week with CURRENT_PUZZLE_ID.
  *
- * Coordinate system (letter = column, number = row, row 1 at top):
+ * How to add a puzzle
+ * -------------------
+ * 1. Put PNGs in static/icons/ (filename = icon word, spaces → hyphens)
+ *    or add an emoji in icons.js.
+ * 2. Copy WEEK_TEMPLATE below, rename it, and fill in the 3×3.
+ * 3. List 3 groups. cells: 'a1 a2 b2'  (a1 is top-left).
+ *    result: the cell where the answer icon pops; the other two go empty.
+ * 4. Push the puzzle into PUZZLES and set CURRENT_PUZZLE_ID.
+ *
+ * Groups must be a row, column, or L — no diagonals. A group may skip
+ * tiles if solving another group first leaves an empty path (carnival “knee”).
+ *
  *   a1 b1 c1
  *   a2 b2 c2
  *   a3 b3 c3
  */
 
+import { definePuzzle, fill, link, rebus } from './definePuzzle.js';
+
+export { definePuzzle, fill, link, rebus };
+
 /** @typedef {{ id: string; type: 'fixed'|'fill'; word?: string; options?: string[]; correct?: string }} Cell */
 /** @typedef {{ id: string; word: string; kind: 'link'|'rebus'; cells: string[]; resultCell?: string }} Group */
-/** @typedef {{
- *   id: string;
- *   number: string;
- *   title: string;
- *   BOARD: Cell[];
- *   GROUPS: Group[];
- *   THEME: { word: string; icons: string[] };
- *   THEME_GROUP: Group;
- *   COLLECTIBLE: { number: string; word: string };
- *   HINT_REVEAL_ORDER: string[];
- *   GROUP_COLORS: Record<string, string>;
- *   COMBINE_SIZE: number;
- *   MAX_HINTS: number;
- *   MAX_LIVES: number;
- *   TOTAL_MOVES: number;
- * }} Puzzle
- */
+/** @typedef {ReturnType<typeof definePuzzle>} Puzzle */
 
-const SHARED = {
-  COMBINE_SIZE: 3,
-  MAX_HINTS: 3,
-  MAX_LIVES: 3,
-};
-
-/** @param {Omit<Puzzle, 'COMBINE_SIZE'|'MAX_HINTS'|'MAX_LIVES'|'TOTAL_MOVES'|'THEME_GROUP'> & { themeKind?: 'link'|'rebus' }} def */
-function makePuzzle(def) {
-  const { themeKind = 'rebus', ...rest } = def;
-  return {
-    ...SHARED,
-    ...rest,
-    THEME_GROUP: {
-      id: rest.THEME.word,
-      word: rest.THEME.word,
-      kind: themeKind,
-      cells: /** @type {string[]} */ ([]),
-    },
-    TOTAL_MOVES: rest.GROUPS.length + 1,
-  };
-}
-
-/**
- * Puzzle 1 — mitt / owl / algae → mythology
- *
- *   [athena]  awl         jay
- *   wisdom    eye         eye chart
- *   hand      himantes2   [himantes1]
- *
- * Each group is an orthogonal 3-path. Leftover results land on
- * b2 / c2 / c3 so the last combine is edge-adjacent (no diagonals).
- */
-const mythology = makePuzzle({
+const mythology = definePuzzle({
   id: 'mythology',
-  number: '001',
-  title: 'Puzzle 1',
-  BOARD: [
-    { id: 'a1', type: 'fill', options: ['athena', 'hera', 'aphrodite'], correct: 'athena' },
-    { id: 'b1', type: 'fixed', word: 'awl' },
-    { id: 'c1', type: 'fixed', word: 'jay' },
-    { id: 'a2', type: 'fixed', word: 'wisdom' },
-    { id: 'b2', type: 'fixed', word: 'eye' },
-    { id: 'c2', type: 'fixed', word: 'eye chart' },
-    { id: 'a3', type: 'fixed', word: 'hand' },
-    { id: 'b3', type: 'fixed', word: 'himantes2' },
-    {
-      id: 'c3',
-      type: 'fill',
-      options: ['himantes1', 'helmet', 'mittens'],
-      correct: 'himantes1',
-    },
+  number: 1,
+  theme: 'mythology',
+  collectible: 'owl',
+  hints: ['algae', 'owl', 'mitt'],
+  board: [
+    [fill('athena', 'hera', 'aphrodite'), 'awl', 'jay'],
+    ['wisdom', 'eye', 'eye chart'],
+    ['hand', 'himantes2', fill('himantes1', 'helmet', 'mittens')],
   ],
-  GROUPS: [
-    { id: 'owl', word: 'owl', kind: 'link', cells: ['a1', 'a2', 'b2'], resultCell: 'b2' },
-    { id: 'algae', word: 'algae', kind: 'rebus', cells: ['b1', 'c1', 'c2'], resultCell: 'c2' },
-    { id: 'mitt', word: 'mitt', kind: 'link', cells: ['a3', 'b3', 'c3'], resultCell: 'c3' },
+  groups: [
+    link('owl', 'a1 a2 b2', 'b2'),
+    rebus('algae', 'b1 c1 c2', 'c2'),
+    link('mitt', 'a3 b3 c3', 'c3'),
   ],
-  THEME: { word: 'mythology', icons: ['mitt', 'owl', 'algae'] },
-  themeKind: 'rebus',
-  COLLECTIBLE: { number: '001', word: 'owl' },
-  HINT_REVEAL_ORDER: ['algae', 'owl', 'mitt'],
-  GROUP_COLORS: {
-    algae: '#00008B',
-    mitt: '#0000CD',
-    owl: '#ADD8E6',
-    mythology: '#5e8fb6',
-  },
 });
 
-/**
- * Puzzle 2 — car / knee / bull → carnival
- *
- *   [neon]  bumper car   minus
- *   roller  clown car    on
- *   [horn]  red cape     bullseye
- *
- * Car lands on b2 so the vacant bumper-car cell unlocks the knee rebus.
- */
-const carnival = makePuzzle({
+const carnival = definePuzzle({
   id: 'carnival',
-  number: '002',
-  title: 'Puzzle 2',
-  BOARD: [
-    { id: 'a1', type: 'fill', options: ['neon', 'x-ray', 'lamp'], correct: 'neon' },
-    { id: 'b1', type: 'fixed', word: 'bumper car' },
-    { id: 'c1', type: 'fixed', word: 'minus' },
-    { id: 'a2', type: 'fixed', word: 'roller coaster' },
-    { id: 'b2', type: 'fixed', word: 'clown car' },
-    { id: 'c2', type: 'fixed', word: 'on' },
-    { id: 'a3', type: 'fill', options: ['horn', 'tusk', 'fingernail'], correct: 'horn' },
-    { id: 'b3', type: 'fixed', word: 'red cape' },
-    { id: 'c3', type: 'fixed', word: 'bullseye target' },
+  number: 2,
+  theme: 'carnival',
+  collectible: 'ferris-wheel',
+  hints: ['knee', 'car', 'bull'],
+  board: [
+    [fill('neon', 'x-ray', 'lamp'), 'bumper car', 'minus'],
+    ['roller coaster', 'clown car', 'on'],
+    [fill('horn', 'tusk', 'fingernail'), 'red cape', 'bullseye target'],
   ],
-  GROUPS: [
-    { id: 'car', word: 'car', kind: 'link', cells: ['b1', 'b2', 'a2'], resultCell: 'b2' },
-    { id: 'knee', word: 'knee', kind: 'rebus', cells: ['a1', 'c1', 'c2'], resultCell: 'c2' },
-    { id: 'bull', word: 'bull', kind: 'link', cells: ['a3', 'b3', 'c3'], resultCell: 'c3' },
+  groups: [
+    link('car', 'b1 b2 a2', 'b2'),
+    rebus('knee', 'a1 c1 c2', 'c2'),
+    link('bull', 'a3 b3 c3', 'c3'),
   ],
-  THEME: { word: 'carnival', icons: ['car', 'knee', 'bull'] },
-  themeKind: 'rebus',
-  COLLECTIBLE: { number: '002', word: 'ferris-wheel' },
-  HINT_REVEAL_ORDER: ['knee', 'car', 'bull'],
-  GROUP_COLORS: {
-    knee: '#00008B',
-    car: '#0000CD',
-    bull: '#ADD8E6',
-    carnival: '#5e8fb6',
-  },
 });
 
-/**
- * Puzzle 3 — scent / roll / park → central park
- *
- *   rolled cash   dollar        [divide]
- *   kaiser roll   [RR]          hundred
- *   tree          slide         bench
- *
- * Each group is an orthogonal 3-path. Leftover results land on
- * b2 / c2 / c3 so the last combine is edge-adjacent (no diagonals).
- */
-const centralPark = makePuzzle({
+const centralPark = definePuzzle({
   id: 'central-park',
-  number: '003',
-  title: 'Puzzle 3',
-  BOARD: [
-    { id: 'a1', type: 'fixed', word: 'rolled cash' },
-    { id: 'b1', type: 'fixed', word: 'dollar' },
-    { id: 'c1', type: 'fill', options: ['divide', 'multiply', 'addition'], correct: 'divide' },
-    { id: 'a2', type: 'fixed', word: 'kaiser roll' },
-    {
-      id: 'b2',
-      type: 'fill',
-      options: ['maserati', 'rolls-royce', 'lamborghini'],
-      correct: 'rolls-royce',
-    },
-    { id: 'c2', type: 'fixed', word: 'hundred' },
-    { id: 'a3', type: 'fixed', word: 'tree' },
-    { id: 'b3', type: 'fixed', word: 'slide' },
-    { id: 'c3', type: 'fixed', word: 'bench' },
+  number: 3,
+  theme: 'central park',
+  collectible: 'central park',
+  hints: ['scent', 'roll', 'park'],
+  board: [
+    ['rolled cash', 'dollar', fill('divide', 'multiply', 'addition')],
+    ['kaiser roll', fill(['maserati', 'rolls-royce', 'lamborghini'], 'rolls-royce'), 'hundred'],
+    ['tree', 'slide', 'bench'],
   ],
-  GROUPS: [
-    { id: 'roll', word: 'roll', kind: 'link', cells: ['a1', 'a2', 'b2'], resultCell: 'b2' },
-    { id: 'scent', word: 'scent', kind: 'rebus', cells: ['b1', 'c1', 'c2'], resultCell: 'c2' },
-    { id: 'park', word: 'park', kind: 'link', cells: ['a3', 'b3', 'c3'], resultCell: 'c3' },
+  groups: [
+    link('roll', 'a1 a2 b2', 'b2'),
+    rebus('scent', 'b1 c1 c2', 'c2'),
+    link('park', 'a3 b3 c3', 'c3'),
   ],
-  THEME: { word: 'central park', icons: ['scent', 'roll', 'park'] },
-  themeKind: 'rebus',
-  COLLECTIBLE: { number: '003', word: 'central park' },
-  HINT_REVEAL_ORDER: ['scent', 'roll', 'park'],
-  GROUP_COLORS: {
-    scent: '#00008B',
-    roll: '#0000CD',
-    park: '#ADD8E6',
-    'central park': '#5e8fb6',
-  },
 });
 
-/**
- * Puzzle 4 — fur / ant / ship → friendship
- *
- *   mink        hip            she
- *   rabbit      [fox]          shh
- *   ant colony  [anthill]      queen ant
- */
-const friendship = makePuzzle({
+const friendship = definePuzzle({
   id: 'friendship',
-  number: '004',
-  title: 'Puzzle 4',
-  BOARD: [
-    { id: 'a1', type: 'fixed', word: 'mink' },
-    { id: 'b1', type: 'fixed', word: 'hip' },
-    { id: 'c1', type: 'fixed', word: 'she' },
-    { id: 'a2', type: 'fixed', word: 'rabbit' },
-    { id: 'b2', type: 'fill', options: ['fox', 'lamb', 'goat'], correct: 'fox' },
-    { id: 'c2', type: 'fixed', word: 'shh' },
-    { id: 'a3', type: 'fixed', word: 'ant colony' },
-    { id: 'b3', type: 'fill', options: ['anthill', 'owl home', 'nest'], correct: 'anthill' },
-    { id: 'c3', type: 'fixed', word: 'queen ant' },
+  number: 4,
+  theme: 'friendship',
+  collectible: 'friendship',
+  hints: ['fur', 'ant', 'ship'],
+  board: [
+    ['mink', 'hip', 'she'],
+    ['rabbit', fill('fox', 'lamb', 'goat'), 'shh'],
+    ['ant colony', fill('anthill', 'owl home', 'nest'), 'queen ant'],
   ],
-  GROUPS: [
-    { id: 'fur', word: 'fur', kind: 'link', cells: ['a1', 'a2', 'b2'], resultCell: 'b2' },
-    { id: 'ant', word: 'ant', kind: 'link', cells: ['a3', 'b3', 'c3'], resultCell: 'c3' },
-    { id: 'ship', word: 'ship', kind: 'rebus', cells: ['c2', 'c1', 'b1'], resultCell: 'c2' },
+  groups: [
+    link('fur', 'a1 a2 b2', 'b2'),
+    link('ant', 'a3 b3 c3', 'c3'),
+    rebus('ship', 'c2 c1 b1', 'c2'),
   ],
-  THEME: { word: 'friendship', icons: ['fur', 'ant', 'ship'] },
-  themeKind: 'rebus',
-  COLLECTIBLE: { number: '004', word: 'friendship' },
-  HINT_REVEAL_ORDER: ['fur', 'ant', 'ship'],
-  GROUP_COLORS: {
-    ship: '#00008B',
-    fur: '#0000CD',
-    ant: '#ADD8E6',
-    friendship: '#5e8fb6',
-  },
 });
 
-/**
- * Puzzle 5 — leaves / daylight / temperature → fall (this week)
- *
- *   temp     [maple]   oak
- *   [air]    birch     aight
- *   char     day       lie
- *
- * Leaves sit on b1–c1–b2; daylight on b3–c3–c2. Results land on
- * a2 / b2 / c2 so the theme combine is the middle row.
- */
-const fall = makePuzzle({
+const fall = definePuzzle({
   id: 'fall',
-  number: '005',
-  title: 'Puzzle 5',
-  BOARD: [
-    { id: 'a1', type: 'fixed', word: 'temp' },
-    {
-      id: 'b1',
-      type: 'fill',
-      options: ['maple', 'honey', 'dandelion'],
-      correct: 'maple',
-    },
-    { id: 'c1', type: 'fixed', word: 'oak' },
-    {
-      id: 'a2',
-      type: 'fill',
-      options: ['air', 'water', 'fire'],
-      correct: 'air',
-    },
-    { id: 'b2', type: 'fixed', word: 'birch' },
-    { id: 'c2', type: 'fixed', word: 'aight' },
-    { id: 'a3', type: 'fixed', word: 'char' },
-    { id: 'b3', type: 'fixed', word: 'day' },
-    { id: 'c3', type: 'fixed', word: 'lie' },
-  ],
-  GROUPS: [
-    { id: 'leaves', word: 'leaves', kind: 'link', cells: ['b1', 'c1', 'b2'], resultCell: 'b2' },
-    { id: 'daylight', word: 'daylight', kind: 'rebus', cells: ['b3', 'c3', 'c2'], resultCell: 'c2' },
-    { id: 'temperature', word: 'temperature', kind: 'rebus', cells: ['a1', 'a2', 'a3'], resultCell: 'a2' },
-  ],
-  THEME: { word: 'fall', icons: ['leaves', 'temperature', 'daylight'] },
+  number: 5,
+  theme: 'fall',
   themeKind: 'link',
-  COLLECTIBLE: { number: '005', word: 'fall' },
-  HINT_REVEAL_ORDER: ['daylight', 'temperature', 'leaves'],
-  GROUP_COLORS: {
-    daylight: '#00008B',
-    temperature: '#0000CD',
-    leaves: '#ADD8E6',
-    fall: '#5e8fb6',
-  },
+  collectible: 'fall',
+  hints: ['daylight', 'temperature', 'leaves'],
+  board: [
+    ['temp', fill('maple', 'honey', 'dandelion'), 'oak'],
+    [fill('air', 'water', 'fire'), 'birch', 'aight'],
+    ['char', 'day', 'lie'],
+  ],
+  groups: [
+    link('leaves', 'b1 c1 b2', 'b2'),
+    rebus('daylight', 'b3 c3 c2', 'c2'),
+    rebus('temperature', 'a1 a2 a3', 'a2'),
+  ],
 });
+
+/*
+const WEEK_TEMPLATE = definePuzzle({
+  id: 'example',
+  number: 6,
+  theme: 'example',
+  themeKind: 'rebus',
+  collectible: 'example',
+  hints: ['group-a', 'group-b', 'group-c'],
+  board: [
+    ['top-left', fill('answer', 'decoy', 'decoy'), 'top-right'],
+    ['mid-left', 'center', 'mid-right'],
+    ['bot-left', 'bot-center', 'bot-right'],
+  ],
+  groups: [
+    link('group-a', 'a1 a2 b2', 'b2'),
+    rebus('group-b', 'b1 c1 c2', 'c2'),
+    link('group-c', 'a3 b3 c3', 'c3'),
+  ],
+});
+*/
 
 /** @type {Puzzle[]} */
 export const PUZZLES = [mythology, carnival, centralPark, friendship, fall];

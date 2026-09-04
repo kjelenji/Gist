@@ -14,12 +14,15 @@ The scoreboard uses this project's public Supabase anon key by default.
 To point at a different project, copy `myapp/.env.example` → `myapp/.env`.
 Run `myapp/supabase/schema.sql` in the Supabase SQL editor if tables are missing.
 
-## Deploy (Render)
+## Deploy (Cloudflare)
+
+App root is `myapp`. The build produces a Worker in `.svelte-kit/cloudflare` — do **not** run `node build` (that starts a Node server and never exits).
 
 - Root directory: `myapp`
-- Build: `npm install && npm run build`
-- Start: `node build`
-- Env: `NODE_VERSION=20` (Supabase URL + anon key are set in `render.yaml`)
+- Build command: `npm run build`
+- Build output directory: `.svelte-kit/cloudflare`
+- Deploy command: leave empty
+- Compatibility flag: `nodejs_als` (already set in `wrangler.jsonc`)
 
 ## How it works
 

@@ -21,6 +21,9 @@
     resultCellForGroup,
     solveProgress,
     answerKey,
+    isOrthogonalNeighbors,
+    canReachOrthogonally,
+    isOrthogonalSelection,
   } from '$lib/puzzleBoard.js';
   import {
     getPuzzle,
@@ -235,55 +238,17 @@
     return tile?.dataset?.cellId ?? null;
   }
 
-  /** Column/row for cell ids like "a1" (col 0–2, row 0–2). */
-  function cellCoords(id: string) {
-    return {
-      col: id.charCodeAt(0) - 97,
-      row: Number(id[1]) - 1,
-    };
+  function boardIds() {
+    return BOARD.map((c) => c.id);
   }
 
-  /** True if two cells share an edge (no diagonals). Corners/edges of the board are fine. */
-  function isOrthogonalNeighbors(a: string, b: string) {
-    const A = cellCoords(a);
-    const B = cellCoords(b);
-    return Math.abs(A.col - B.col) + Math.abs(A.row - B.row) === 1;
+  /** Empty tiles the swipe may cross (not selected). */
+  function walkableIds() {
+    return BOARD.filter((c) => isVacant(c.id)).map((c) => c.id);
   }
 
-  /** Vacant tiles are empty for combining but can be crossed while swiping. */
   function canPathThrough(cellId: string) {
     return isVacant(cellId);
-  }
-
-  /**
-   * Can we walk from → to using only orthogonal steps, optionally through solved tiles?
-   * Blocks diagonal jumps even if the finger skips across a corner.
-   */
-  function canReachOrthogonally(fromId: string, toId: string) {
-    if (fromId === toId) return true;
-    if (isOrthogonalNeighbors(fromId, toId)) return true;
-
-    const queue = [fromId];
-    const seen = new Set([fromId]);
-    while (queue.length) {
-      const cur = queue.shift()!;
-      for (const cell of BOARD) {
-        const id = cell.id;
-        if (seen.has(id) || !isOrthogonalNeighbors(cur, id)) continue;
-        if (id === toId) return true;
-        if (!canPathThrough(id)) continue;
-        seen.add(id);
-        queue.push(id);
-      }
-    }
-    return false;
-  }
-
-  function isOrthogonalSelection(path: string[]) {
-    for (let i = 1; i < path.length; i++) {
-      if (!canReachOrthogonally(path[i - 1], path[i])) return false;
-    }
-    return true;
   }
 
   function tryAddToSwipe(cellId: string) {
@@ -301,9 +266,9 @@
 
     if (selected.length >= COMBINE_SIZE) return;
 
-    // Must be edge-adjacent to the last selected tile (or via vacant path-through).
+    // Must share an edge with the last tile (or reach it through empty tiles).
     const last = selected[selected.length - 1];
-    if (last && !canReachOrthogonally(last, cellId)) return;
+    if (last && !canReachOrthogonally(last, cellId, boardIds(), walkableIds())) return;
 
     selected = [...selected, cellId];
   }
@@ -406,11 +371,10 @@
       selected = [swipeStartId];
     }
 
-    // Also block selecting a tile that would make the chosen path diagonal
     if (
       selected.length > 0 &&
       !canPathThrough(id) &&
-      !canReachOrthogonally(selected[selected.length - 1], id)
+      !canReachOrthogonally(selected[selected.length - 1], id, boardIds(), walkableIds())
     ) {
       return;
     }
@@ -466,11 +430,15 @@
       }
     }
 
-    if (path.length === COMBINE_SIZE && isOrthogonalSelection(path)) {
+    if (path.length === COMBINE_SIZE) {
+      if (!isOrthogonalSelection(path, boardIds(), walkableIds())) {
+        selected = [];
+        feedback = 'Stay on shared edges — no diagonals.';
+        return;
+      }
       selected = path;
       checkSelection();
     } else {
-      // Fewer than 3, or a diagonal/disconnected path — clear quietly
       selected = [];
       if (moved && path.length > 0) feedback = '';
     }
@@ -512,7 +480,19 @@
   function checkSelection() {
     const attempt = [...selected];
     if (!puzzle) return;
-    const group = matchGroup(puzzle, attempt, solvedOrder, fillAnswers, currentBoardWords());
+    if (!isOrthogonalSelection(attempt, boardIds(), walkableIds())) {
+      selected = [];
+      feedback = 'Stay on shared edges — no diagonals.';
+      return;
+    }
+    const group = matchGroup(
+      puzzle,
+      attempt,
+      solvedOrder,
+      fillAnswers,
+      currentBoardWords(),
+      walkableIds()
+    );
 
     if (!group) {
       const maybe = GROUPS.find(

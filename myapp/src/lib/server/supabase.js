@@ -22,17 +22,11 @@ function pick(value, fallback) {
 }
 
 function supabaseUrl() {
-  return pick(env.SUPABASE_URL || process.env.SUPABASE_URL, FALLBACK_URL);
+  return pick(env.SUPABASE_URL, FALLBACK_URL);
 }
 
 function supabaseKey() {
-  return pick(
-    env.SUPABASE_PUBLISHABLE_KEY ||
-      env.SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_PUBLISHABLE_KEY ||
-      process.env.SUPABASE_ANON_KEY,
-    FALLBACK_KEY
-  );
+  return pick(env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY, FALLBACK_KEY);
 }
 
 /** @type {import('@supabase/supabase-js').SupabaseClient | null} */

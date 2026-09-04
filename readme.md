@@ -20,8 +20,7 @@ App root is `myapp`. The build produces a Worker in `.svelte-kit/cloudflare` —
 
 - Root directory: `myapp`
 - Build command: `npm run build`
-- Build output directory: `.svelte-kit/cloudflare`
-- Deploy command: leave empty
+- Deploy command: `npx wrangler deploy` (not `adapter-cloudflare`, not `node build`)
 - Compatibility flag: `nodejs_als` (already set in `wrangler.jsonc`)
 
 ## How it works

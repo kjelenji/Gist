@@ -217,7 +217,10 @@
       </div>
 
       <footer class="footer">
-        <p>© 2026 Gist | <a href="/terms">Terms</a></p>
+        <p>
+          © 2026 Gist | <a href="/terms">Terms</a> |
+          <a href="https://ko-fi.com/gistriddles" target="_blank" rel="noopener noreferrer">Support</a>
+        </p>
       </footer>
     </div>
   </div>

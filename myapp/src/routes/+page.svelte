@@ -219,7 +219,31 @@
       <footer class="footer">
         <p>
           © 2026 Gist | <a href="/terms">Terms</a> |
-          <a href="https://ko-fi.com/gistriddles" target="_blank" rel="noopener noreferrer">Support</a>
+          <a
+            class="footer-icon footer-icon-kofi"
+            href="https://ko-fi.com/gistriddles"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Support on Ko-fi"
+            title="Support on Ko-fi"
+          >
+            <img src="/kofi.png" alt="" width="22" height="18" />
+          </a>
+          |
+          <a
+            class="footer-icon"
+            href="https://bsky.app/profile/gistriddles.bsky.social"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Gist on Bluesky"
+            title="Gist on Bluesky"
+          >
+            <svg viewBox="0 0 600 530" aria-hidden="true">
+              <path
+                d="M135.72 44.03c66.496 49.921 138.02 151.14 164.28 205.46 26.262-54.316 97.782-155.54 164.28-205.46 47.98-36.021 125.72-63.892 125.72 24.795 0 17.712-10.155 148.79-16.111 170.07-20.708 73.984-96.144 92.854-163.25 81.433 117.3 19.964 147.14 86.092 82.697 152.22-122.43 125.59-175.91-31.511-189.63-71.85-2.514-7.4-3.61-10.89-3.61-7.94 0-3.95-1.096-.54-3.61 7.94-13.714 40.34-67.198 197.44-189.63 71.85-64.444-66.128-34.605-132.26 82.697-152.22-67.108 11.421-142.54-7.449-163.25-81.433-5.956-21.282-16.111-152.36-16.111-170.07 0-88.687 77.742-60.816 125.72-24.795z"
+              />
+            </svg>
+          </a>
         </p>
       </footer>
     </div>
@@ -514,6 +538,34 @@
 
   .footer a:hover {
     text-decoration: underline;
+  }
+
+  .footer-icon {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: -0.15em;
+  }
+
+  .footer-icon svg {
+    width: 1.35em;
+    height: 1.35em;
+    fill: currentColor;
+    overflow: visible;
+  }
+
+  .footer-icon-kofi img {
+    width: 1.55em;
+    height: auto;
+    display: block;
+  }
+
+  .footer a.footer-icon:hover {
+    text-decoration: none;
+    color: var(--gist-text);
+  }
+
+  .footer a.footer-icon-kofi:hover {
+    opacity: 0.85;
   }
 
   .modal-backdrop {
